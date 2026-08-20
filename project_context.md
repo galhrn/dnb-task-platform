@@ -127,6 +127,7 @@ dnb-task-platform/
 │     │  └─ purity.test.ts               asserts the layer imports no framework
 │     ├─ application/
 │     │  ├─ ports/                       TaskRepository, UserRepository, UnitOfWork
+│     │  │                                (no barrel — §15; imported file by file)
 │     │  └─ use-cases/
 │     │     ├─ create-task.ts
 │     │     ├─ change-task-status.ts
@@ -134,11 +135,12 @@ dnb-task-platform/
 │     │     ├─ get-user-tasks.ts
 │     │     └─ list-task-types.ts
 │     ├─ infrastructure/
-│     │  ├─ db/data-source.ts
+│     │  ├─ db/data-source.ts            entities + migrations registered explicitly
 │     │  ├─ db/entities/                 TaskEntity, TaskTransitionEntity, UserEntity
-│     │  ├─ db/repositories/             TypeORM implementations of the ports
-│     │  ├─ db/migrations/
-│     │  └─ db/seeds/seed-users.ts
+│     │  ├─ db/repositories/             TypeORM implementations + the UnitOfWork
+│     │  ├─ db/migrations/               hand-written SQL, committed
+│     │  ├─ db/migrate.ts                `migration:run` / `--revert`, no CLI wiring
+│     │  └─ db/seeds/seed-users.ts       fixed ids, idempotent
 │     ├─ interfaces/http/
 │     │  ├─ app.ts                       express app factory; receives its dependencies
 │     │  ├─ routes/                      health.routes.ts, tasks.routes.ts, users.routes.ts, task-types.routes.ts
@@ -304,7 +306,9 @@ task_transitions                        -- append-only, source of truth
 
 | # | Migration | Contents |
 |---|---|---|
-| 1 | `InitialSchema` | users, tasks, task_transitions, indexes |
+| 1 | `InitialSchema1755730000000` | users, tasks, task_transitions, both indexes, FKs, and CHECK constraints on `state`, `status >= 1` and `kind`. Verified down-then-up on a live database. |
+
+The CHECKs encode *structure* — `state` and `kind` are closed sets belonging to the workflow itself, so the database can hold the line even if something ever reaches it around the Zod boundary. Nothing task-type-specific is encoded: that would need a migration per type and defeat ADR-007. `text` + CHECK rather than a Postgres enum, because widening an enum is an `ALTER TYPE` and a constraint costs nothing to change.
 
 ---
 
@@ -326,6 +330,8 @@ task_transitions                        -- append-only, source of truth
 | ADR-012 | **`GET /users/:id/tasks` returns every task**, open and closed, with an optional `?state=OPEN\|CLOSED` filter | Defaulting to open-only was considered and rejected as a silent, undiscoverable omission — a caller cannot distinguish absent-because-closed from absent-because-unassigned. | The default is the honest answer; narrowing is explicit and lives in the query string. An unrecognised `state` value is `BAD_REQUEST` (400), not silently ignored. |
 | ADR-013 | **Marketing is a 2-status ladder**: Created → Campaign launched, entry field `campaignUrl` | A richer 4–5 step funnel was considered and rejected: it adds domain detail the assignment never asked for and dilutes what the commit is meant to prove. | Shortest legal ladder, and a third distinct length — the diff proves the engine derives its bounds rather than knowing them. Named `campaignUrl`, not `campaign_url`, for consistency with `branchName`/`specification` (§15). |
 | ADR-014 | **Field kinds are a closed vocabulary dispatched through a lookup table**, not an extension point | Refines ADR-009, does not supersede it. A strategy interface per primitive with registration and DI was considered and rejected: it is the right shape for the open axis (task types, served by the registry) and the wrong shape for a set that changes once a project. Vocabulary widened to `string`, `number`, `boolean`, `date`, `string-array`. | `Record<FieldKind, builder>` typed as `{ [K in FieldKind]: FieldSchemaBuilder<K> }`, so a kind with no builder is a compile error — the exhaustiveness a `switch` gave, kept. Per-type rules a primitive cannot express stay in the `onEnter` hook, so the vocabulary is under no pressure to grow. If kinds ever become runtime-extensible the table is already the seam. README explains the asymmetry. |
+| ADR-015 | **The version guard is always applied**, using the version the request read; `expectedVersion` is an *additional* staleness check | Refines ADR-010's consequence. Its "omitting `expectedVersion` means last-write-wins" was written before the write path existed; once a use case reads a task and writes it back, comparing against the version it read costs one `AND` and closes the lost-update window entirely. Keeping it opt-in would have been a weaker guarantee for no gain. | Two distinct protections: the repository always guards against interleaving inside the request, and a client-supplied `expectedVersion` additionally guards against acting on a stale page. Both surface as `VERSION_CONFLICT`. |
+| ADR-016 | **Writes go through a guarded `UPDATE ... WHERE id AND version`**, not `repository.save()` | TypeORM's `save()` was assumed to enforce `@VersionColumn`. It does not: the integration test proved a stale write silently succeeded, and a `save()` of a deleted row re-inserted it. The query builder *does* honour the column — it emits `version = version + 1` and respects the guard. | `applyTransition` issues one conditional `UPDATE ... RETURNING *`; `affected === 0` then distinguishes a vanished row (`NOT_FOUND`) from a concurrent one (`VERSION_CONFLICT`). Correctness no longer depends on ORM behaviour we would have to trust. `@VersionColumn` still drives the increment and the schema. |
 
 ---
 
@@ -347,7 +353,7 @@ Each milestone has a definition of done. This file is updated at the end of each
 
 - [x] **M0 — Scaffold.** Workspaces, TS strict configs, Express boot, docker-compose, DataSource, health route. *DoD: `npm run dev` serves `/api/health`; `docker compose up -d` gives a reachable Postgres.* — **done 2026-08-21**
 - [x] **M1 — Domain core.** `TaskTypeDefinition`, registry, descriptor→Zod compiler, workflow engine, domain errors. Procurement + Development definitions. *DoD: unit tests cover WF-1..WF-7 and derived rules; zero framework imports in `domain/`.* — **done 2026-08-21**, 91 tests green.
-- [ ] **M2 — Persistence.** Entities, InitialSchema migration, repository implementations, user seed. *DoD: migration runs clean on an empty DB; seeds insert demo users.*
+- [x] **M2 — Persistence.** Entities, InitialSchema migration, repository implementations, user seed. *DoD: migration runs clean on an empty DB; seeds insert demo users.* — **done 2026-08-21**; down-then-up verified, 14 integration tests green.
 - [ ] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.*
 - [ ] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.*
 - [ ] **M5 — Client.** API client, hooks, `DynamicFieldForm`, task list, status controls. *DoD: full lifecycle drivable from the UI; no per-type conditionals in any component.*
@@ -362,6 +368,7 @@ Each milestone has a definition of done. This file is updated at the end of each
 |---|---|---|---|
 | `domain/` | Pure unit, no DB | Vitest | WF-1..WF-7 and derived rules; the engine is genuinely framework-free |
 | `application/` | Unit with repository doubles | Vitest | Orchestration, transaction intent, version conflict handling |
+| `infrastructure/` | Integration | Vitest + dockerised PG (`npm run test:int`) | The version guard, transactional rollback, JSONB round-trip — the things a repository double would only agree with |
 | `interfaces/http` | Integration | Vitest + Supertest + dockerised PG | Status codes and error envelope for every code in §9 |
 | Extensibility | Structural | `domain/extensibility.test.ts` — registers a 5-status throwaway type at runtime | Adding a type requires no engine change — the claim, asserted |
 | Purity | Structural | `domain/purity.test.ts` — reads every import in `domain/` | The layer is framework-free, and stays that way after the next contributor |
@@ -398,5 +405,10 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
 | 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
 | 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | **M2 executed** on `feat/m2-persistence`. Entities, `InitialSchema`, repositories, `TypeOrmUnitOfWork`, `migrate.ts`, user seed, 14 integration tests. | Persistence milestone. |
+| 2026-08-21 | *Finding:* TypeORM's `save()` does **not** enforce `@VersionColumn` — a stale write succeeded, and saving a deleted row re-inserted it. ADR-016 recorded; write path is now a guarded `UPDATE ... RETURNING *`. | The integration test was written expecting the ORM to do this and failed. Worth keeping in mind: a mocked repository would have agreed with the wrong assumption forever. |
+| 2026-08-21 | *Local choice:* `migration:run` / `seed` are small scripts over the DataSource API rather than the TypeORM CLI. | The CLI needs a TypeScript loader pinned onto a path inside `node_modules`, which breaks differently on each OS — a poor thing to hand a reviewer. `migration:generate` is not needed; migrations are hand-written (§10). |
+| 2026-08-21 | *Local choice:* no `@ManyToOne` between tasks and users. The FKs are real, declared in the migration. | Nothing in §9 traverses the association, and an ORM relation that exists only to look complete invites accidental eager loading. |
+| 2026-08-21 | *Local choice:* unit and integration suites are separate commands (`test` / `test:int`, two vitest configs). | `npm test` has to stay runnable with no container, and the domain suite has no business waiting on Postgres. |
 | 2026-08-21 | *M1 refinement:* `switch (field.kind)` replaced by a typed lookup table; `boolean` and `date` added to the vocabulary. ADR-014 recorded, README gained a “Design decisions & trade-offs” entry explaining the asymmetry with task types. | The switch read like a per-type conditional to a skimming reviewer even though it was not one. The table says “dispatch” rather than “branch”, and the mapped type keeps exhaustiveness. 97 tests green. |
 | 2026-08-21 | *Local choice:* the engine takes and returns snapshots and never touches `id` or `version`. | Identity comes from the database and `version` from `@VersionColumn` (ADR-010); a domain that invented either would need a clock or a UUID source and stop being pure. `createTask` therefore returns a `NewTaskSnapshot` with neither field. |

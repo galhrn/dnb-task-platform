@@ -14,9 +14,13 @@
     "dev": "npm run dev --workspace @task-platform/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:int": "npm run test:int --workspaces --if-present",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d"
+    "db:reset": "docker compose down -v && docker compose up -d",
+    "migration:run": "npm run migration:run --workspace @task-platform/api",
+    "migration:revert": "npm run migration:revert --workspace @task-platform/api",
+    "seed": "npm run seed --workspace @task-platform/api"
   },
   "devDependencies": {
     "@types/node": "22.20.1",

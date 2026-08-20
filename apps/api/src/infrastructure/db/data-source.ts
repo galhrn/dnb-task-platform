@@ -3,6 +3,10 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 
 import { env } from '../../config/env';
+import { TaskEntity } from './entities/task.entity';
+import { TaskTransitionEntity } from './entities/task-transition.entity';
+import { UserEntity } from './entities/user.entity';
+import { InitialSchema1755730000000 } from './migrations/1755730000000-initial-schema';
 
 /**
  * The single TypeORM DataSource.
@@ -23,7 +27,6 @@ export const AppDataSource = new DataSource({
   synchronize: false,
   logging: env.NODE_ENV === 'development' ? ['error', 'warn', 'migration'] : ['error'],
 
-  // M2 registers TaskEntity, TaskTransitionEntity, UserEntity and InitialSchema here.
-  entities: [],
-  migrations: [],
+  entities: [UserEntity, TaskEntity, TaskTransitionEntity],
+  migrations: [InitialSchema1755730000000],
 });

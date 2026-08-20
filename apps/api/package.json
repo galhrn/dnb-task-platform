@@ -8,7 +8,11 @@
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:int": "vitest run --config vitest.int.config.ts",
+    "migration:run": "tsx src/infrastructure/db/migrate.ts",
+    "migration:revert": "tsx src/infrastructure/db/migrate.ts --revert",
+    "seed": "tsx src/infrastructure/db/seeds/seed-users.ts"
   },
   "dependencies": {
     "@task-platform/contracts": "*",

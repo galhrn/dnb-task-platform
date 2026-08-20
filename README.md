@@ -96,7 +96,15 @@ Moving from status 3 back to 2 discards the data collected for status 3. Re-adva
 
 ### Concurrency
 
-Status changes run in a transaction against a versioned row. Concurrent modification returns `409 VERSION_CONFLICT` rather than silently losing a write.
+Status changes run in a transaction against a versioned row. Concurrent modification returns
+`409 VERSION_CONFLICT` rather than silently losing a write.
+
+The write is a conditional `UPDATE ... WHERE id = $1 AND version = $2 RETURNING *`, guarded
+with the version the request read — so a lost update is impossible even when the client sends
+no `expectedVersion`. It is *not* `repository.save()`: the integration suite was written
+assuming TypeORM enforced `@VersionColumn` on save, and it demonstrated the opposite — a stale
+write succeeded, and saving a deleted row re-inserted it. That test is still there, and it is
+the reason this layer is verified against a real database rather than a double.
 
 ### Field kinds are a lookup table, not a Strategy pattern
 
