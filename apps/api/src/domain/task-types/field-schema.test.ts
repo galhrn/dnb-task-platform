@@ -78,6 +78,58 @@ describe('number descriptors', () => {
   });
 });
 
+describe('boolean descriptors', () => {
+  const agreed: FieldDescriptor = {
+    kind: 'boolean',
+    name: 'agreed',
+    label: 'Agreed',
+    required: true,
+  };
+
+  it('accepts both true and false - false is a value, not an absence', () => {
+    expect(parse([agreed], { agreed: true }).success).toBe(true);
+    expect(parse([agreed], { agreed: false }).success).toBe(true);
+  });
+
+  it('rejects a missing key even though false would have been fine', () => {
+    expect(parse([agreed], {}).success).toBe(false);
+  });
+
+  it('never coerces - the string "false" is not a boolean', () => {
+    expect(parse([agreed], { agreed: 'false' }).success).toBe(false);
+    expect(parse([agreed], { agreed: 0 }).success).toBe(false);
+  });
+});
+
+describe('date descriptors', () => {
+  const dueOn: FieldDescriptor = {
+    kind: 'date',
+    name: 'dueOn',
+    label: 'Due on',
+    required: true,
+  };
+
+  it('accepts a calendar date', () => {
+    expect(parse([dueOn], { dueOn: '2026-08-21' }).success).toBe(true);
+  });
+
+  it('rejects timestamps, other formats and impossible days', () => {
+    expect(parse([dueOn], { dueOn: '2026-08-21T10:00:00Z' }).success).toBe(false);
+    expect(parse([dueOn], { dueOn: '21/08/2026' }).success).toBe(false);
+    expect(parse([dueOn], { dueOn: '2026-02-30' }).success).toBe(false);
+    expect(parse([dueOn], { dueOn: 20260821 }).success).toBe(false);
+  });
+
+  it('honours inclusive min and max bounds', () => {
+    const bounded: FieldDescriptor = { ...dueOn, min: '2026-01-01', max: '2026-12-31' };
+
+    expect(parse([bounded], { dueOn: '2025-12-31' }).success).toBe(false);
+    expect(parse([bounded], { dueOn: '2026-01-01' }).success).toBe(true);
+    expect(parse([bounded], { dueOn: '2026-12-31' }).success).toBe(true);
+    expect(parse([bounded], { dueOn: '2027-01-01' }).success).toBe(false);
+  });
+});
+
 describe('string-array descriptors', () => {
   const quotes: FieldDescriptor = {
     kind: 'string-array',

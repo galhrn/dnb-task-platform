@@ -74,7 +74,7 @@ Express was chosen over NestJS deliberately. Nest's multi-provider DI would regi
 
 ---
 
-## Design decisions
+## Design decisions & trade-offs
 
 Each of these had a rejected alternative. Full log in `project_context.md` §11.
 
@@ -97,6 +97,48 @@ Moving from status 3 back to 2 discards the data collected for status 3. Re-adva
 ### Concurrency
 
 Status changes run in a transaction against a versioned row. Concurrent modification returns `409 VERSION_CONFLICT` rather than silently losing a write.
+
+### Field kinds are a lookup table, not a Strategy pattern
+
+Field descriptors compile to Zod schemas through a `Record<FieldKind, builder>` in
+`field-schema.ts` — five entries, one per primitive: `string`, `number`, `boolean`, `date`,
+`string-array`. No strategy interface, no per-kind class, no registration, no injection.
+
+That is a deliberate asymmetry with how **task types** are handled two files away, and the
+reasoning is worth stating because the two look superficially similar.
+
+**Open/Closed is applied to the axis that actually changes.** The assignment's question is
+"how do you add a task type without touching existing code", so task types get the full
+treatment: a definition per file, a registry, and an `index.ts` whose only job is a list.
+Adding one modifies nothing. That axis is open because the requirement says it is open.
+
+**Field kinds are a different axis, and it is closed.** The primitive vocabulary of a form
+field is not a moving target — it is roughly the set JSON already has. It changes about
+once a project, by a developer, in a pull request. Modelling it as an extension point
+would mean an interface per primitive, a plugin registry to discover implementations, and
+a DI container to wire them: more indirection and more files to serve a set that will not
+move, and it would scatter the descriptor vocabulary across the codebase — which is
+exactly the drift ADR-009 exists to prevent by making descriptors the single source of
+truth.
+
+**The lookup table gives up nothing the `switch` had.** Its type is
+`{ [K in FieldKind]: FieldSchemaBuilder<K> }`, so a new kind with no builder is a
+*compile* error, and each builder still receives its own narrowed descriptor type. It is
+a dispatch table, not a conditional — there is no branch to fall through and nothing to
+forget.
+
+**And the pressure valve is elsewhere.** The thing that genuinely varies per task type is
+*rules*, not primitives — "quote B must be lower than quote A", "this date must follow
+that one". Those go in a type's optional `onEnter` hook, which is opt-in composition on
+the definition itself. Because that hatch exists, the vocabulary never needs to grow to
+express a rule, so it stays small on purpose.
+
+**The trade-off, stated plainly.** If field kinds ever became *runtime*-extensible — a
+form builder, tenant-defined fields, kinds loaded from configuration — this decision
+inverts and a real plugin boundary earns its keep. Nothing in the current design would
+have to be unpicked to get there: the table is already the seam. Until that requirement
+exists, building for it would be over-engineering, and a reviewer would be right to say
+so. (`project_context.md` ADR-014.)
 
 ---
 
