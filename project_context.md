@@ -80,9 +80,9 @@ interfaces/http  ──►  application  ──►  domain
         └──────────────────┴──────►  infrastructure (via ports/interfaces)
 ```
 
-**Dependency rule: `interfaces → application → domain`. Never the reverse. `domain` imports nothing but TypeScript and Zod.**
+**Dependency rule: `interfaces → application → domain`. Never the reverse. `domain` imports nothing but TypeScript, Zod and the type-only `@task-platform/contracts` — enforced by `domain/purity.test.ts`, which reads every import in the layer and fails on anything else.**
 
-- **domain/** — framework-free. The workflow engine, task-type definitions, the registry, domain errors. Operates on plain snapshot objects. Unit-testable with no database, no HTTP, no container.
+- **domain/** — framework-free. The workflow engine, task-type definitions, the registry, domain errors. Operates on plain snapshot objects. Unit-testable with no database, no HTTP, no container. Contracts is imported for *types* only (`import type`), so the layer has no runtime dependency on it at all.
 - **application/** — use cases. Owns transaction boundaries and orchestration. Depends on repository *interfaces* declared here, not on TypeORM.
 - **infrastructure/** — TypeORM entities, repository implementations, migrations, seeds, DataSource.
 - **interfaces/http/** — Express routers, request DTO parsing, the error-mapping middleware, the composition root.
@@ -114,15 +114,17 @@ dnb-task-platform/
 │     ├─ domain/
 │     │  ├─ workflow/
 │     │  │  ├─ workflow-engine.ts        rules WF-1..WF-7, pure functions
-│     │  │  └─ errors.ts                 domain error classes
+│     │  │  └─ errors.ts                 DomainError hierarchy, one per ErrorCode
 │     │  ├─ task-types/
 │     │  │  ├─ task-type-definition.ts   the contract every type implements
-│     │  │  ├─ registry.ts               Map<type, definition>, lookup + list
-│     │  │  ├─ field-schema.ts           descriptor → Zod compiler
+│     │  │  ├─ registry.ts               Map<type, definition>, lookup + describe()
+│     │  │  ├─ field-schema.ts           descriptor → Zod compiler, memoised per definition
 │     │  │  ├─ procurement.task-type.ts  ← one file per type
 │     │  │  ├─ development.task-type.ts
 │     │  │  └─ index.ts                  the ONE registration list
-│     │  └─ task.ts                      TaskSnapshot type + invariant helpers
+│     │  ├─ task.ts                      TaskSnapshot type + data helpers
+│     │  ├─ extensibility.test.ts        a throwaway type driven end to end
+│     │  └─ purity.test.ts               asserts the layer imports no framework
 │     ├─ application/
 │     │  ├─ ports/                       TaskRepository, UserRepository, UnitOfWork
 │     │  └─ use-cases/
@@ -343,7 +345,7 @@ task_transitions                        -- append-only, source of truth
 Each milestone has a definition of done. This file is updated at the end of each.
 
 - [x] **M0 — Scaffold.** Workspaces, TS strict configs, Express boot, docker-compose, DataSource, health route. *DoD: `npm run dev` serves `/api/health`; `docker compose up -d` gives a reachable Postgres.* — **done 2026-08-21**
-- [ ] **M1 — Domain core.** `TaskTypeDefinition`, registry, descriptor→Zod compiler, workflow engine, domain errors. Procurement + Development definitions. *DoD: unit tests cover WF-1..WF-7 and derived rules; zero framework imports in `domain/`.*
+- [x] **M1 — Domain core.** `TaskTypeDefinition`, registry, descriptor→Zod compiler, workflow engine, domain errors. Procurement + Development definitions. *DoD: unit tests cover WF-1..WF-7 and derived rules; zero framework imports in `domain/`.* — **done 2026-08-21**, 91 tests green.
 - [ ] **M2 — Persistence.** Entities, InitialSchema migration, repository implementations, user seed. *DoD: migration runs clean on an empty DB; seeds insert demo users.*
 - [ ] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.*
 - [ ] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.*
@@ -360,7 +362,8 @@ Each milestone has a definition of done. This file is updated at the end of each
 | `domain/` | Pure unit, no DB | Vitest | WF-1..WF-7 and derived rules; the engine is genuinely framework-free |
 | `application/` | Unit with repository doubles | Vitest | Orchestration, transaction intent, version conflict handling |
 | `interfaces/http` | Integration | Vitest + Supertest + dockerised PG | Status codes and error envelope for every code in §9 |
-| Extensibility | Structural | A test registering a throwaway task type at runtime | Adding a type requires no engine change — the claim, asserted |
+| Extensibility | Structural | `domain/extensibility.test.ts` — registers a 5-status throwaway type at runtime | Adding a type requires no engine change — the claim, asserted |
+| Purity | Structural | `domain/purity.test.ts` — reads every import in `domain/` | The layer is framework-free, and stays that way after the next contributor |
 
 Not chasing a coverage number. Chasing: every row in §6 and every row in the §9 error table has a named test.
 
@@ -388,3 +391,10 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice (reversible):* `tsx` as the dev runner; not listed in §3 because it is tooling, not architecture. | Zero-config TS execution + watch. Swappable for `ts-node` or `node --experimental-strip-types` without touching source. |
 | 2026-08-21 | *Deferred:* TypeORM CLI wiring and the `migration:*` / `seed` npm scripts move to **M2**, alongside the first migration. | Nothing to run at M0; the DataSource is verified through `/api/health` instead. |
 | 2026-08-21 | *Deferred:* `apps/web` is scaffolded at **M5**, not M0. | The workspace glob `apps/*` already covers it; scaffolding an empty Vite app now would add dependencies with nothing to render. |
+| 2026-08-21 | **M1 executed** on `feat/m1-domain`. Engine, registry, descriptor compiler, `DomainError` hierarchy, Procurement + Development. 91 unit tests. | Domain milestone. |
+| 2026-08-21 | *Correction:* M1 was asked for with all three task types; Marketing was held back for M7 instead. | ADR-008 makes the M7 commit the extensibility proof, and "zero frontend files changed" only means something once a frontend exists. Confirmed before building. |
+| 2026-08-21 | *Local choice:* `domain/` imports `@task-platform/contracts` — `import type` only — rather than redeclaring `FieldDescriptor`. §4 reworded. | Two declarations of the descriptor shape would drift, and ADR-009 makes that shape the single source of truth. No runtime dependency is created, and `purity.test.ts` pins the allowance to exactly two packages. |
+| 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
+| 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
+| 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | *Local choice:* the engine takes and returns snapshots and never touches `id` or `version`. | Identity comes from the database and `version` from `@VersionColumn` (ADR-010); a domain that invented either would need a clock or a UUID source and stop being pure. `createTask` therefore returns a `NewTaskSnapshot` with neither field. |
