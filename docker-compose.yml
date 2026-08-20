@@ -1,0 +1,22 @@
+# PostgreSQL only. The application itself is not containerised - see project_context.md section 2.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: task-platform-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-taskuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskpass}
+      POSTGRES_DB: ${POSTGRES_DB:-taskplatform}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - task-platform-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskuser} -d ${POSTGRES_DB:-taskplatform}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  task-platform-data:
