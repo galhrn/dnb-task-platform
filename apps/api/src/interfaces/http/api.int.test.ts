@@ -60,14 +60,17 @@ beforeEach(async () => {
 async function createProcurementTask(assignedUserId = ALICE) {
   const response = await request(app)
     .post('/api/tasks')
-    .send({ type: 'PROCUREMENT', assignedUserId })
+    .send({ type: 'PROCUREMENT', assignedUserId, actorUserId: assignedUserId })
     .expect(201);
 
   return response.body as { id: string; version: number };
 }
 
 function transition(taskId: string, body: Record<string, unknown>) {
-  return request(app).post(`/api/tasks/${taskId}/transitions`).send(body);
+  // Every caller acts as Ada unless it says otherwise; the actor is required now.
+  return request(app)
+    .post(`/api/tasks/${taskId}/transitions`)
+    .send({ actorUserId: ALICE, ...body });
 }
 
 describe('GET /api/task-types', () => {
@@ -113,7 +116,7 @@ describe('the task lifecycle', () => {
 
     const closed = await request(app)
       .post(`/api/tasks/${created.id}/close`)
-      .send({})
+      .send({ actorUserId: ALICE })
       .expect(200);
 
     // ADR-011 - the task stays with whoever held it.
@@ -134,13 +137,16 @@ describe('the task lifecycle', () => {
     ]);
   });
 
-  it('accepts a close with no body at all', async () => {
+  it('requires an actor on close - it is a state change, but somebody made it', async () => {
     const created = await createProcurementTask();
 
     await transition(created.id, { toStatus: 2, assignedUserId: ALICE, data: QUOTES }).expect(200);
     await transition(created.id, { toStatus: 3, assignedUserId: ALICE, data: RECEIPT }).expect(200);
 
-    await request(app).post(`/api/tasks/${created.id}/close`).expect(200);
+    await request(app)
+      .post(`/api/tasks/${created.id}/close`)
+      .send({ actorUserId: ALICE })
+      .expect(200);
   });
 
   it('derives direction from the target status, and clears forward data going back', async () => {
@@ -163,6 +169,75 @@ describe('the task lifecycle', () => {
   });
 });
 
+describe('the audit trail', () => {
+  it('records who performed each transition, separately from who received the task', async () => {
+    const created = await createProcurementTask();
+
+    // Ada hands the task to Grace...
+    await transition(created.id, {
+      toStatus: 2,
+      assignedUserId: BOB,
+      actorUserId: ALICE,
+      data: QUOTES,
+    }).expect(200);
+
+    // ...and Grace moves it on herself.
+    await transition(created.id, {
+      toStatus: 3,
+      assignedUserId: BOB,
+      actorUserId: BOB,
+      data: RECEIPT,
+    }).expect(200);
+
+    await request(app)
+      .post(`/api/tasks/${created.id}/close`)
+      .send({ actorUserId: BOB })
+      .expect(200);
+
+    const found = await request(app).get(`/api/tasks/${created.id}`).expect(200);
+    const { transitions } = found.body as {
+      transitions: { kind: string; actorUserId: string; assignedUserId: string }[];
+    };
+
+    expect(
+      transitions.map((entry) => [entry.kind, entry.actorUserId, entry.assignedUserId]),
+    ).toEqual([
+      ['CREATE', ALICE, ALICE],
+      // The handover: Ada acted, Grace received. Reading the assignee alone would
+      // credit this move to the wrong person.
+      ['FORWARD', ALICE, BOB],
+      ['FORWARD', BOB, BOB],
+      // A close hands the task to nobody, so the actor is the only name there is.
+      ['CLOSE', BOB, BOB],
+    ]);
+  });
+
+  it('rejects an actor who does not exist, without writing anything', async () => {
+    const created = await createProcurementTask();
+
+    await transition(created.id, {
+      toStatus: 2,
+      assignedUserId: ALICE,
+      actorUserId: MISSING,
+      data: QUOTES,
+    }).expect(404);
+
+    const found = await request(app).get(`/api/tasks/${created.id}`).expect(200);
+
+    expect((found.body as { status: number }).status).toBe(1);
+    expect((found.body as { transitions: unknown[] }).transitions).toHaveLength(1);
+  });
+
+  it('requires an actor on every mutation', async () => {
+    const created = await createProcurementTask();
+
+    await request(app)
+      .post(`/api/tasks/${created.id}/transitions`)
+      .send({ toStatus: 2, assignedUserId: ALICE, data: QUOTES })
+      .expect(400);
+  });
+});
+
 describe('GET /api/users/:id/tasks (ADR-012)', () => {
   it('returns open and closed by default and narrows on request', async () => {
     const open = await createProcurementTask();
@@ -170,7 +245,10 @@ describe('GET /api/users/:id/tasks (ADR-012)', () => {
 
     await transition(toClose.id, { toStatus: 2, assignedUserId: ALICE, data: QUOTES }).expect(200);
     await transition(toClose.id, { toStatus: 3, assignedUserId: ALICE, data: RECEIPT }).expect(200);
-    await request(app).post(`/api/tasks/${toClose.id}/close`).expect(200);
+    await request(app)
+      .post(`/api/tasks/${toClose.id}/close`)
+      .send({ actorUserId: ALICE })
+      .expect(200);
 
     const all = await request(app).get(`/api/users/${ALICE}/tasks`).expect(200);
     const onlyOpen = await request(app).get(`/api/users/${ALICE}/tasks?state=OPEN`).expect(200);
@@ -209,7 +287,7 @@ describe('BAD_REQUEST (400) - the request cannot be parsed', () => {
   it('rejects a key the endpoint never declared', async () => {
     await request(app)
       .post('/api/tasks')
-      .send({ type: 'PROCUREMENT', assignedUserId: ALICE, priority: 'high' })
+      .send({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE, priority: 'high' })
       .expect(400);
   });
 
@@ -234,7 +312,7 @@ describe('NOT_FOUND (404)', () => {
   it('reports an unknown task type', async () => {
     const response = await request(app)
       .post('/api/tasks')
-      .send({ type: NEVER_REGISTERED, assignedUserId: ALICE })
+      .send({ type: NEVER_REGISTERED, assignedUserId: ALICE, actorUserId: ALICE })
       .expect(404);
 
     expect(response.body).toMatchObject({ error: { code: 'NOT_FOUND' } });
@@ -243,7 +321,7 @@ describe('NOT_FOUND (404)', () => {
   it('reports an unknown assignee, task and user', async () => {
     await request(app)
       .post('/api/tasks')
-      .send({ type: 'PROCUREMENT', assignedUserId: MISSING })
+      .send({ type: 'PROCUREMENT', assignedUserId: MISSING, actorUserId: ALICE })
       .expect(404);
 
     await request(app).get(`/api/tasks/${MISSING}`).expect(404);
@@ -311,7 +389,10 @@ describe('INVALID_TRANSITION (409)', () => {
   it('refuses to close before the final status', async () => {
     const created = await createProcurementTask();
 
-    const response = await request(app).post(`/api/tasks/${created.id}/close`).expect(409);
+    const response = await request(app)
+      .post(`/api/tasks/${created.id}/close`)
+      .send({ actorUserId: ALICE })
+      .expect(409);
 
     expect(response.body).toMatchObject({ error: { code: 'INVALID_TRANSITION' } });
   });
@@ -323,7 +404,10 @@ describe('TASK_CLOSED (409)', () => {
 
     await transition(created.id, { toStatus: 2, assignedUserId: ALICE, data: QUOTES }).expect(200);
     await transition(created.id, { toStatus: 3, assignedUserId: ALICE, data: RECEIPT }).expect(200);
-    await request(app).post(`/api/tasks/${created.id}/close`).expect(200);
+    await request(app)
+      .post(`/api/tasks/${created.id}/close`)
+      .send({ actorUserId: ALICE })
+      .expect(200);
 
     return created;
   }
@@ -339,7 +423,10 @@ describe('TASK_CLOSED (409)', () => {
   it('refuses to close twice - not idempotent success (WF-6a)', async () => {
     const closed = await closedTask();
 
-    const response = await request(app).post(`/api/tasks/${closed.id}/close`).expect(409);
+    const response = await request(app)
+      .post(`/api/tasks/${closed.id}/close`)
+      .send({ actorUserId: ALICE })
+      .expect(409);
 
     expect(response.body).toMatchObject({ error: { code: 'TASK_CLOSED' } });
   });
@@ -380,7 +467,7 @@ describe('VERSION_CONFLICT (409)', () => {
 
     await request(app)
       .post(`/api/tasks/${created.id}/close`)
-      .send({ expectedVersion: 1 })
+      .send({ actorUserId: ALICE, expectedVersion: 1 })
       .expect(409);
   });
 });

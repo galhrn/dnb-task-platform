@@ -38,7 +38,7 @@ const throwawayTaskType: TaskTypeDefinition = {
 };
 
 function newTask(): TaskSnapshot {
-  const { task } = createTask(throwawayTaskType, { assignedUserId: 'user-alice' });
+  const { task } = createTask(throwawayTaskType, { assignedUserId: 'user-alice', actorUserId: 'user-alice' });
 
   // Identity and version come from persistence; the engine never invents them.
   return { ...task, id: 'task-throwaway', version: 1 };
@@ -48,6 +48,7 @@ function advance(task: TaskSnapshot, toStatus: number, data?: Record<string, unk
   return changeTaskStatus(throwawayTaskType, task, {
     toStatus,
     assignedUserId: 'user-bob',
+    actorUserId: 'user-alice',
     ...(data === undefined ? {} : { data }),
   }).task;
 }
@@ -79,7 +80,7 @@ describe('a task type the engine has never seen', () => {
       '5': {},
     });
 
-    const { task: closed, transition } = closeTask(throwawayTaskType, task);
+    const { task: closed, transition } = closeTask(throwawayTaskType, task, 'user-alice');
 
     expect(closed.state).toBe('CLOSED');
     expect(transition).toMatchObject({ fromStatus: 5, toStatus: null, kind: 'CLOSE' });
@@ -89,7 +90,7 @@ describe('a task type the engine has never seen', () => {
     const created = newTask();
 
     expect(() => advance(created, 3, { score: 4 })).toThrow(/exactly one status/);
-    expect(() => closeTask(throwawayTaskType, created)).toThrow(/status 5/);
+    expect(() => closeTask(throwawayTaskType, created, 'user-alice')).toThrow(/status 5/);
 
     let task = advance(created, 2, { reviewer: 'Dana' });
     task = advance(task, 3, { score: 4 });
@@ -143,12 +144,13 @@ describe('the onEnter escape hatch (section 8)', () => {
     return changeTaskStatus(withHook, task, {
       toStatus,
       assignedUserId: 'user-bob',
+      actorUserId: 'user-alice',
       ...(data === undefined ? {} : { data }),
     }).task;
   }
 
   function started(): TaskSnapshot {
-    const { task } = createTask(withHook, { assignedUserId: 'user-alice' });
+    const { task } = createTask(withHook, { assignedUserId: 'user-alice', actorUserId: 'user-alice' });
 
     return { ...task, id: 'task-strict', version: 1 };
   }
@@ -168,7 +170,7 @@ describe('the onEnter escape hatch (section 8)', () => {
   });
 
   it('leaves types without a hook completely unaffected', () => {
-    const { task } = createTask(throwawayTaskType, { assignedUserId: 'user-alice' });
+    const { task } = createTask(throwawayTaskType, { assignedUserId: 'user-alice', actorUserId: 'user-alice' });
     const plain: TaskSnapshot = { ...task, id: 'task-plain', version: 1 };
 
     expect(advance(advance(plain, 2, { reviewer: 'Dana' }), 3, { score: 1 }).status).toBe(3);

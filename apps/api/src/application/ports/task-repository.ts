@@ -14,6 +14,7 @@ export interface PersistedTask extends TaskSnapshot {
   readonly updatedAt: Date;
 }
 
+/** A history row as stored: the engine's record plus its identity and timestamp. */
 export interface PersistedTransition extends TransitionRecord {
   readonly id: string;
   readonly createdAt: Date;

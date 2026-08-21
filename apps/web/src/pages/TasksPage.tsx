@@ -9,8 +9,11 @@ import { useTaskTypes, useUserTasks, useUsers } from '../hooks/queries';
 
 /**
  * There is no authentication (section 2), so the app acts as a seeded user. The id below
- * is Ada from `npm run seed`; the picker in the header switches who you are acting as,
- * which is the only way to watch a task change hands after a status change.
+ * is Ada from `npm run seed`; the picker in the header switches who you are, which is the
+ * only way to watch a task change hands after a status change.
+ *
+ * This is also what the API records as the ACTOR on every transition. Without a login it
+ * is self-asserted rather than authenticated - provenance, not proof.
  *
  * To change the default, edit this constant - it is the one hard-coded id in the client.
  */
@@ -47,7 +50,7 @@ export function TasksPage(): JSX.Element {
 
         <div className="who">
           <label className="field inline">
-            <span className="field-label">Acting as</span>
+            <span className="field-label">Current user</span>
             <select
               value={actingAs}
               onChange={(event) => {
@@ -83,7 +86,7 @@ export function TasksPage(): JSX.Element {
           <CreateTaskForm
             descriptors={taskTypes.data}
             users={users.data}
-            defaultAssignee={actingAs}
+            currentUserId={actingAs}
             onCreated={setSelectedId}
           />
 
@@ -106,7 +109,12 @@ export function TasksPage(): JSX.Element {
           {selectedId === null ? (
             <p className="muted">Select a task to manage its lifecycle.</p>
           ) : (
-            <TaskDetails taskId={selectedId} descriptors={taskTypes.data} users={users.data} />
+            <TaskDetails
+              taskId={selectedId}
+              descriptors={taskTypes.data}
+              users={users.data}
+              currentUserId={actingAs}
+            />
           )}
         </section>
       </div>

@@ -34,16 +34,25 @@ export interface TransitionRecord {
   readonly kind: TransitionKind;
   /** What the caller supplied for this move; backward moves and closes supply nothing. */
   readonly payload: StatusData;
+  /** Who holds the task after this transition (WF-1). */
   readonly assignedUserId: string;
+  /**
+   * Who performed it. Distinct from the assignee: handing a task on means the actor and
+   * the new holder are different people, and a close has an actor but no new holder.
+   * Self-asserted - there is no authentication here (section 2).
+   */
+  readonly actorUserId: string;
 }
 
 export interface CreateTaskInput {
   readonly assignedUserId: string;
+  readonly actorUserId: string;
 }
 
 export interface ChangeStatusCommand {
   readonly toStatus: number;
   readonly assignedUserId: string;
+  readonly actorUserId: string;
   readonly data?: Readonly<Record<string, unknown>>;
 }
 
@@ -79,6 +88,15 @@ function assertAssignee(assignedUserId: string): void {
   }
 }
 
+/** Every entry in the history says who caused it, including a close. */
+function assertActor(actorUserId: string): void {
+  if (actorUserId.trim().length === 0) {
+    throw new ValidationFailedError('Every transition must name the user who performed it', [
+      { path: 'actorUserId', message: 'An acting user is required' },
+    ]);
+  }
+}
+
 /** WF-7 - the data required to ENTER the target status (ADR-005). */
 function validateEntryData(
   definition: TaskTypeDefinition,
@@ -110,6 +128,7 @@ export function createTask(
   input: CreateTaskInput,
 ): CreateTaskResult {
   assertAssignee(input.assignedUserId);
+  assertActor(input.actorUserId);
 
   return {
     task: {
@@ -125,6 +144,7 @@ export function createTask(
       kind: 'CREATE',
       payload: {},
       assignedUserId: input.assignedUserId,
+      actorUserId: input.actorUserId,
     },
   };
 }
@@ -156,6 +176,7 @@ function moveForward(
       kind: 'FORWARD',
       payload,
       assignedUserId: command.assignedUserId,
+      actorUserId: command.actorUserId,
     },
   };
 }
@@ -193,6 +214,7 @@ function moveBackward(
       kind: 'BACKWARD',
       payload: {},
       assignedUserId: command.assignedUserId,
+      actorUserId: command.actorUserId,
     },
   };
 }
@@ -214,6 +236,7 @@ export function changeTaskStatus(
   }
 
   assertAssignee(command.assignedUserId);
+  assertActor(command.actorUserId);
 
   // WF-3
   if (!isValidStatus(definition, command.toStatus)) {
@@ -233,8 +256,13 @@ export function changeTaskStatus(
 }
 
 /** WF-6 - a task may only be closed at its final status. */
-export function closeTask(definition: TaskTypeDefinition, task: TaskSnapshot): TransitionResult {
+export function closeTask(
+  definition: TaskTypeDefinition,
+  task: TaskSnapshot,
+  actorUserId: string,
+): TransitionResult {
   assertDefinitionMatches(definition, task);
+  assertActor(actorUserId);
 
   // WF-2 / WF-6a - closing a closed task is an error, not idempotent success.
   if (isClosed(task)) {
@@ -257,7 +285,9 @@ export function closeTask(definition: TaskTypeDefinition, task: TaskSnapshot): T
       toStatus: null,
       kind: 'CLOSE',
       payload: {},
+      // ADR-011 - the holder does not change, but somebody did the closing.
       assignedUserId: task.assignedUserId,
+      actorUserId,
     },
   };
 }

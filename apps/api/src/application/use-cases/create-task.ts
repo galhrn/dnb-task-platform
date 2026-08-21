@@ -7,6 +7,8 @@ import type { UnitOfWork } from '../ports/unit-of-work';
 export interface CreateTaskInput {
   readonly type: string;
   readonly assignedUserId: string;
+  /** Who is creating it. Self-asserted; there is no authentication (section 2). */
+  readonly actorUserId: string;
 }
 
 /**
@@ -25,13 +27,16 @@ export class CreateTaskUseCase {
     const definition = this.registry.get(input.type);
 
     return this.unitOfWork.runInTransaction(async ({ tasks, users }) => {
-      // WF-1. The foreign key would catch this too, but as a 500 rather than a 404.
-      if (!(await users.exists(input.assignedUserId))) {
-        throw new UserNotFoundError(input.assignedUserId);
+      // WF-1. The foreign key would catch these too, but as a 500 rather than a 404.
+      for (const userId of new Set([input.assignedUserId, input.actorUserId])) {
+        if (!(await users.exists(userId))) {
+          throw new UserNotFoundError(userId);
+        }
       }
 
       const { task, transition } = createTask(definition, {
         assignedUserId: input.assignedUserId,
+        actorUserId: input.actorUserId,
       });
 
       // The task row and its CREATE history row commit together, or not at all.

@@ -10,6 +10,8 @@ export interface StatusControlsProps {
   readonly task: TaskWithHistoryDto;
   readonly descriptor: TaskTypeDescriptor;
   readonly users: readonly UserDto[];
+  /** Recorded as the actor on whatever this component does. */
+  readonly currentUserId: string;
 }
 
 /**
@@ -28,7 +30,12 @@ export interface StatusControlsProps {
  * enforcement. Reversing past a status the server would refuse is impossible here, but if
  * it were attempted the 409 would still come back and be shown.
  */
-export function StatusControls({ task, descriptor, users }: StatusControlsProps): JSX.Element {
+export function StatusControls({
+  task,
+  descriptor,
+  users,
+  currentUserId,
+}: StatusControlsProps): JSX.Element {
   const finalStatus = descriptor.statuses.length;
   const nextStatus = task.status + 1;
   const nextFields = descriptor.statuses[nextStatus - 1]?.fields ?? [];
@@ -87,6 +94,7 @@ export function StatusControls({ task, descriptor, users }: StatusControlsProps)
             changeStatus.mutate({
               toStatus: nextStatus,
               assignedUserId: assignee,
+              actorUserId: currentUserId,
               data: toPayload(nextFields, values),
               expectedVersion: task.version,
             });
@@ -120,6 +128,7 @@ export function StatusControls({ task, descriptor, users }: StatusControlsProps)
             changeStatus.mutate({
               toStatus: reverseTo,
               assignedUserId: assignee,
+              actorUserId: currentUserId,
               expectedVersion: task.version,
             });
           }}
@@ -157,7 +166,9 @@ export function StatusControls({ task, descriptor, users }: StatusControlsProps)
           <button
             type="button"
             disabled={pending}
-            onClick={() => closeTask.mutate({ expectedVersion: task.version })}
+            onClick={() =>
+              closeTask.mutate({ actorUserId: currentUserId, expectedVersion: task.version })
+            }
           >
             Close task
           </button>

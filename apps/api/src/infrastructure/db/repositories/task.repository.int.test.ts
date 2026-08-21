@@ -60,7 +60,7 @@ function repository() {
 }
 
 async function seedTaskAtStatusOne() {
-  const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE });
+  const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE, actorUserId: ALICE });
 
   return repository().create(task, transition);
 }
@@ -101,6 +101,7 @@ describe('applyTransition', () => {
     const { task: next, transition } = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -115,6 +116,7 @@ describe('applyTransition', () => {
     const { task: next, transition } = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -128,6 +130,7 @@ describe('applyTransition', () => {
     const forward = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
     const atTwo = await repository().applyTransition(forward.task, forward.transition);
@@ -135,6 +138,7 @@ describe('applyTransition', () => {
     const backward = changeTaskStatus(procurementTaskType, atTwo, {
       toStatus: 1,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
     });
     await repository().applyTransition(backward.task, backward.transition);
 
@@ -157,6 +161,7 @@ describe('applyTransition', () => {
     const toTwo = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
     const atTwo = await repository().applyTransition(toTwo.task, toTwo.transition);
@@ -164,11 +169,12 @@ describe('applyTransition', () => {
     const toThree = changeTaskStatus(procurementTaskType, atTwo, {
       toStatus: 3,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: RECEIPT,
     });
     const atThree = await repository().applyTransition(toThree.task, toThree.transition);
 
-    const closed = closeTask(procurementTaskType, atThree);
+    const closed = closeTask(procurementTaskType, atThree, ALICE);
     const saved = await repository().applyTransition(closed.task, closed.transition);
 
     expect(saved.state).toBe('CLOSED');
@@ -192,11 +198,13 @@ describe('optimistic locking (ADR-010, ADR-015)', () => {
     const first = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
     const second = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -212,6 +220,7 @@ describe('optimistic locking (ADR-010, ADR-015)', () => {
     const move = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -232,6 +241,7 @@ describe('optimistic locking (ADR-010, ADR-015)', () => {
     const move = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -247,6 +257,7 @@ describe('optimistic locking (ADR-010, ADR-015)', () => {
     const move = changeTaskStatus(procurementTaskType, created, {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -266,7 +277,7 @@ describe('optimistic locking (ADR-010, ADR-015)', () => {
 describe('the unit of work', () => {
   it('commits the task and its history together', async () => {
     const id = await unitOfWork.runInTransaction(async ({ tasks }) => {
-      const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE });
+      const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE, actorUserId: ALICE });
 
       return (await tasks.create(task, transition)).id;
     });
@@ -282,11 +293,15 @@ describe('the unit of work', () => {
 
     await expect(
       unitOfWork.runInTransaction(async ({ tasks }) => {
-        const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE });
+        const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE, actorUserId: ALICE });
         const created = await tasks.create(task, transition);
 
         // Exactly what the engine does when a caller tries to skip a status.
-        changeTaskStatus(procurementTaskType, created, { toStatus: 3, assignedUserId: BOB });
+        changeTaskStatus(procurementTaskType, created, {
+          toStatus: 3,
+          assignedUserId: BOB,
+          actorUserId: ALICE,
+        });
       }),
     ).rejects.toThrow(/exactly one status/);
 
@@ -303,16 +318,18 @@ describe('findByAssignee (ADR-012)', () => {
     const toTwo = changeTaskStatus(procurementTaskType, closedTask, {
       toStatus: 2,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: QUOTES,
     });
     const atTwo = await repository().applyTransition(toTwo.task, toTwo.transition);
     const toThree = changeTaskStatus(procurementTaskType, atTwo, {
       toStatus: 3,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: RECEIPT,
     });
     const atThree = await repository().applyTransition(toThree.task, toThree.transition);
-    const closed = closeTask(procurementTaskType, atThree);
+    const closed = closeTask(procurementTaskType, atThree, ALICE);
     await repository().applyTransition(closed.task, closed.transition);
 
     const everything = await repository().findByAssignee(ALICE);

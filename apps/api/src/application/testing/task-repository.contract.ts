@@ -50,6 +50,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
     async function createdTask() {
       const { task, transition } = createTask(procurementTaskType, {
         assignedUserId: harness.alice,
+        actorUserId: harness.alice,
       });
 
       return repository.create(task, transition);
@@ -63,6 +64,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
       const moved = changeTaskStatus(procurementTaskType, task, {
         toStatus,
         assignedUserId: harness.alice,
+        actorUserId: harness.alice,
         data,
       });
 
@@ -108,6 +110,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
       const stale = changeTaskStatus(procurementTaskType, created, {
         toStatus: 2,
         assignedUserId: harness.bob,
+        actorUserId: harness.alice,
         data: QUOTES,
       });
 
@@ -123,6 +126,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
       const move = changeTaskStatus(procurementTaskType, created, {
         toStatus: 2,
         assignedUserId: harness.bob,
+        actorUserId: harness.alice,
         data: QUOTES,
       });
 
@@ -141,6 +145,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
       const back = changeTaskStatus(procurementTaskType, atThree, {
         toStatus: 1,
         assignedUserId: harness.alice,
+        actorUserId: harness.alice,
       });
       const atOne = await repository.applyTransition(back.task, back.transition);
 
@@ -161,7 +166,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
     it('records the holder on CLOSE and stops reporting the task as open', async () => {
       const created = await createdTask();
       const atThree = await advance(await advance(created, 2, QUOTES), 3, RECEIPT);
-      const closed = closeTask(procurementTaskType, atThree);
+      const closed = closeTask(procurementTaskType, atThree, harness.alice);
 
       const saved = await repository.applyTransition(closed.task, closed.transition);
 
@@ -181,6 +186,7 @@ export function runTaskRepositoryContract(name: string, harness: TaskRepositoryH
       const handedOver = changeTaskStatus(procurementTaskType, created, {
         toStatus: 2,
         assignedUserId: harness.bob,
+        actorUserId: harness.alice,
         data: QUOTES,
       });
       await repository.applyTransition(handedOver.task, handedOver.transition);

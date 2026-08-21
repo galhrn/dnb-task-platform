@@ -37,14 +37,14 @@ function completedProcurementTask(): TaskSnapshot {
 
 describe('WF-1 - a task is assigned to exactly one user at any moment', () => {
   it('creation names the assignee', () => {
-    const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE });
+    const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE, actorUserId: ALICE });
 
     expect(task.assignedUserId).toBe(ALICE);
     expect(transition.assignedUserId).toBe(ALICE);
   });
 
   it('rejects creation without an assignee', () => {
-    expect(() => createTask(procurementTaskType, { assignedUserId: '   ' })).toThrow(
+    expect(() => createTask(procurementTaskType, { assignedUserId: '   ', actorUserId: ALICE })).toThrow(
       ValidationFailedError,
     );
   });
@@ -53,6 +53,7 @@ describe('WF-1 - a task is assigned to exactly one user at any moment', () => {
     const { task } = changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -65,19 +66,19 @@ describe('WF-2 - closed tasks are immutable', () => {
 
   it('refuses a forward move on a closed task', () => {
     expect(() =>
-      changeTaskStatus(procurementTaskType, closed, { toStatus: 2, assignedUserId: BOB }),
+      changeTaskStatus(procurementTaskType, closed, { toStatus: 2, assignedUserId: BOB, actorUserId: ALICE }),
     ).toThrow(TaskClosedError);
   });
 
   it('refuses a backward move on a closed task', () => {
     expect(() =>
-      changeTaskStatus(procurementTaskType, closed, { toStatus: 1, assignedUserId: BOB }),
+      changeTaskStatus(procurementTaskType, closed, { toStatus: 1, assignedUserId: BOB, actorUserId: ALICE }),
     ).toThrow(TaskClosedError);
   });
 
   it('reports TASK_CLOSED, not INVALID_TRANSITION', () => {
     try {
-      changeTaskStatus(procurementTaskType, closed, { toStatus: 2, assignedUserId: BOB });
+      changeTaskStatus(procurementTaskType, closed, { toStatus: 2, assignedUserId: BOB, actorUserId: ALICE });
       expect.unreachable('the move should have been rejected');
     } catch (error) {
       expect(error).toBeInstanceOf(TaskClosedError);
@@ -88,7 +89,7 @@ describe('WF-2 - closed tasks are immutable', () => {
 
 describe('WF-3 - status is an ascending integer starting at 1', () => {
   it('creates at status 1, open, with no data', () => {
-    const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE });
+    const { task, transition } = createTask(procurementTaskType, { assignedUserId: ALICE, actorUserId: ALICE });
 
     expect(task.status).toBe(1);
     expect(task.state).toBe('OPEN');
@@ -98,7 +99,7 @@ describe('WF-3 - status is an ascending integer starting at 1', () => {
 
   it.each([0, -1, 4, 99])('rejects out-of-range status %i', (toStatus) => {
     expect(() =>
-      changeTaskStatus(procurementTaskType, procurementTaskAt(1), { toStatus, assignedUserId: BOB }),
+      changeTaskStatus(procurementTaskType, procurementTaskAt(1), { toStatus, assignedUserId: BOB, actorUserId: ALICE }),
     ).toThrow(InvalidTransitionError);
   });
 
@@ -107,6 +108,7 @@ describe('WF-3 - status is an ascending integer starting at 1', () => {
       changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
         toStatus: 2.5,
         assignedUserId: BOB,
+        actorUserId: ALICE,
       }),
     ).toThrow(InvalidTransitionError);
   });
@@ -121,6 +123,7 @@ describe('WF-3 - status is an ascending integer starting at 1', () => {
     const { task } = changeTaskStatus(developmentTaskType, developmentTask, {
       toStatus: 4,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: { version: '1.0.0' },
     });
 
@@ -133,6 +136,7 @@ describe('WF-4 - forward moves are sequential, exactly +1', () => {
     const { task, transition } = changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -145,6 +149,7 @@ describe('WF-4 - forward moves are sequential, exactly +1', () => {
       changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
         toStatus: 3,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: RECEIPT,
       }),
     ).toThrow(InvalidTransitionError);
@@ -155,6 +160,7 @@ describe('WF-4 - forward moves are sequential, exactly +1', () => {
       changeTaskStatus(procurementTaskType, procurementTaskAt(2, { data: { '2': QUOTES } }), {
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
       }),
     ).toThrow(InvalidTransitionError);
   });
@@ -165,6 +171,7 @@ describe('WF-5 - backward moves are unrestricted in distance', () => {
     const { task, transition } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 1,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(task.status).toBe(1);
@@ -175,6 +182,7 @@ describe('WF-5 - backward moves are unrestricted in distance', () => {
     const { task } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(task.status).toBe(2);
@@ -183,7 +191,7 @@ describe('WF-5 - backward moves are unrestricted in distance', () => {
 
 describe('WF-6 - a task may be closed only at its final status', () => {
   it('closes at status 3 for procurement', () => {
-    const { task, transition } = closeTask(procurementTaskType, completedProcurementTask());
+    const { task, transition } = closeTask(procurementTaskType, completedProcurementTask(), ALICE);
 
     expect(task.state).toBe('CLOSED');
     expect(task.status).toBe(3);
@@ -192,24 +200,24 @@ describe('WF-6 - a task may be closed only at its final status', () => {
 
   it('refuses to close before the final status', () => {
     expect(() =>
-      closeTask(procurementTaskType, procurementTaskAt(2, { data: { '2': QUOTES } })),
+      closeTask(procurementTaskType, procurementTaskAt(2, { data: { '2': QUOTES } }), ALICE),
     ).toThrow(InvalidTransitionError);
   });
 
   it('derives the final status from the type - status 3 is not final for development', () => {
     const developmentTask: TaskSnapshot = { ...completedProcurementTask(), type: 'DEVELOPMENT' };
 
-    expect(() => closeTask(developmentTaskType, developmentTask)).toThrow(InvalidTransitionError);
+    expect(() => closeTask(developmentTaskType, developmentTask, ALICE)).toThrow(InvalidTransitionError);
   });
 
   it('WF-6a - closing a closed task is an error, not idempotent success', () => {
     const closed: TaskSnapshot = { ...completedProcurementTask(), state: 'CLOSED' };
 
-    expect(() => closeTask(procurementTaskType, closed)).toThrow(TaskClosedError);
+    expect(() => closeTask(procurementTaskType, closed, ALICE)).toThrow(TaskClosedError);
   });
 
   it('WF-6b - closing keeps the current assignee and asks for no other', () => {
-    const { task, transition } = closeTask(procurementTaskType, completedProcurementTask());
+    const { task, transition } = closeTask(procurementTaskType, completedProcurementTask(), ALICE);
 
     expect(task.assignedUserId).toBe(ALICE);
     expect(transition.assignedUserId).toBe(ALICE);
@@ -222,6 +230,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
       changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
       }),
     ).toThrow(ValidationFailedError);
   });
@@ -231,6 +240,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
       changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: { quotes: ['only one'] },
       });
       expect.unreachable('the move should have been rejected');
@@ -247,6 +257,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
       changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: { ...QUOTES, sneaky: 'value' },
       }),
     ).toThrow(ValidationFailedError);
@@ -257,6 +268,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
       changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
         toStatus: 2,
         assignedUserId: '',
+        actorUserId: ALICE,
         data: QUOTES,
       }),
     ).toThrow(ValidationFailedError);
@@ -265,6 +277,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
       changeTaskStatus(procurementTaskType, completedProcurementTask(), {
         toStatus: 1,
         assignedUserId: '  ',
+        actorUserId: ALICE,
       }),
     ).toThrow(ValidationFailedError);
   });
@@ -273,6 +286,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
     const { task } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 1,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(task.status).toBe(1);
@@ -282,6 +296,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
     const { task, transition } = changeTaskStatus(procurementTaskType, procurementTaskAt(1), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -293,7 +308,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
     const { task } = changeTaskStatus(
       procurementTaskType,
       procurementTaskAt(2, { data: { '2': QUOTES } }),
-      { toStatus: 3, assignedUserId: BOB, data: { receipt: '  INV-9  ' } },
+      { toStatus: 3, assignedUserId: BOB, actorUserId: ALICE, data: { receipt: '  INV-9  ' } },
     );
 
     expect(task.data['3']).toEqual({ receipt: 'INV-9' });
@@ -302,6 +317,7 @@ describe('WF-7 - every status change satisfies the data requirements and records
       changeTaskStatus(procurementTaskType, procurementTaskAt(2, { data: { '2': QUOTES } }), {
         toStatus: 3,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: { receipt: '   ' },
       }),
     ).toThrow(ValidationFailedError);
@@ -313,6 +329,7 @@ describe('WF-7b - a backward move clears the data collected beyond its target', 
     const { task } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(task.data).toEqual({ '2': QUOTES });
@@ -322,6 +339,7 @@ describe('WF-7b - a backward move clears the data collected beyond its target', 
     const { task } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 1,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(task.data).toEqual({});
@@ -331,15 +349,17 @@ describe('WF-7b - a backward move clears the data collected beyond its target', 
     const { task: backAtTwo } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(() =>
-      changeTaskStatus(procurementTaskType, backAtTwo, { toStatus: 3, assignedUserId: ALICE }),
+      changeTaskStatus(procurementTaskType, backAtTwo, { toStatus: 3, assignedUserId: ALICE, actorUserId: ALICE }),
     ).toThrow(ValidationFailedError);
 
     const { task: forwardAgain } = changeTaskStatus(procurementTaskType, backAtTwo, {
       toStatus: 3,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: { receipt: 'INV-REPLACED' },
     });
 
@@ -351,6 +371,7 @@ describe('WF-7b - a backward move clears the data collected beyond its target', 
       changeTaskStatus(procurementTaskType, completedProcurementTask(), {
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: QUOTES,
       }),
     ).toThrow(ValidationFailedError);
@@ -360,6 +381,7 @@ describe('WF-7b - a backward move clears the data collected beyond its target', 
     const { transition } = changeTaskStatus(procurementTaskType, completedProcurementTask(), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(transition).toMatchObject({
@@ -377,8 +399,8 @@ describe('engine hygiene', () => {
     const before = completedProcurementTask();
     const frozen = structuredClone(before);
 
-    changeTaskStatus(procurementTaskType, before, { toStatus: 2, assignedUserId: BOB });
-    closeTask(procurementTaskType, before);
+    changeTaskStatus(procurementTaskType, before, { toStatus: 2, assignedUserId: BOB, actorUserId: ALICE });
+    closeTask(procurementTaskType, before, ALICE);
 
     expect(before).toEqual(frozen);
   });
@@ -387,6 +409,7 @@ describe('engine hygiene', () => {
     const { task } = changeTaskStatus(procurementTaskType, procurementTaskAt(1, { version: 7 }), {
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -398,6 +421,7 @@ describe('engine hygiene', () => {
       changeTaskStatus(developmentTaskType, procurementTaskAt(1), {
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: { specification: 'spec' },
       }),
     ).toThrow(/was evaluated against/);

@@ -7,7 +7,8 @@ import { ErrorBanner } from './ErrorBanner';
 export interface CreateTaskFormProps {
   readonly descriptors: readonly TaskTypeDescriptor[];
   readonly users: readonly UserDto[];
-  readonly defaultAssignee: string;
+  /** Who is using the app: the default assignee, and the actor recorded on CREATE. */
+  readonly currentUserId: string;
   readonly onCreated: (taskId: string) => void;
 }
 
@@ -22,11 +23,11 @@ export interface CreateTaskFormProps {
 export function CreateTaskForm({
   descriptors,
   users,
-  defaultAssignee,
+  currentUserId,
   onCreated,
 }: CreateTaskFormProps): JSX.Element {
   const [type, setType] = useState<string>(descriptors[0]?.type ?? '');
-  const [assignee, setAssignee] = useState<string>(defaultAssignee);
+  const [assignee, setAssignee] = useState<string>(currentUserId);
   const createTask = useCreateTask();
 
   return (
@@ -35,7 +36,7 @@ export function CreateTaskForm({
       onSubmit={(event) => {
         event.preventDefault();
         createTask.mutate(
-          { type, assignedUserId: assignee },
+          { type, assignedUserId: assignee, actorUserId: currentUserId },
           { onSuccess: (task) => onCreated(task.id) },
         );
       }}

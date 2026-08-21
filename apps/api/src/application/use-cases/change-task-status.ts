@@ -9,6 +9,8 @@ export interface ChangeTaskStatusInput {
   readonly taskId: string;
   readonly toStatus: number;
   readonly assignedUserId: string;
+  /** Who is making the move, as opposed to who receives the task. */
+  readonly actorUserId: string;
   readonly data?: Readonly<Record<string, unknown>>;
   readonly expectedVersion?: number;
 }
@@ -45,11 +47,14 @@ export class ChangeTaskStatusUseCase {
       const { task: next, transition } = changeTaskStatus(definition, task, {
         toStatus: input.toStatus,
         assignedUserId: input.assignedUserId,
+        actorUserId: input.actorUserId,
         ...(input.data === undefined ? {} : { data: input.data }),
       });
 
-      if (!(await users.exists(input.assignedUserId))) {
-        throw new UserNotFoundError(input.assignedUserId);
+      for (const userId of new Set([input.assignedUserId, input.actorUserId])) {
+        if (!(await users.exists(userId))) {
+          throw new UserNotFoundError(userId);
+        }
       }
 
       return tasks.applyTransition(next, transition);

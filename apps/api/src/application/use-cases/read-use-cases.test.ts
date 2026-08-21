@@ -50,11 +50,12 @@ beforeEach(() => {
 
 describe('GetTaskUseCase', () => {
   it('returns the task with its history in order', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
     await changeStatus.execute({
       taskId: created.id,
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -71,22 +72,24 @@ describe('GetTaskUseCase', () => {
 
 describe('GetUserTasksUseCase (ADR-012)', () => {
   async function seedOneOpenAndOneClosedForAlice() {
-    const open = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const open = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
-    const toClose = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const toClose = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
     let task = await changeStatus.execute({
       taskId: toClose.id,
       toStatus: 2,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: QUOTES,
     });
     task = await changeStatus.execute({
       taskId: task.id,
       toStatus: 3,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: RECEIPT,
     });
-    await close.execute({ taskId: task.id });
+    await close.execute({ taskId: task.id, actorUserId: ALICE });
 
     return { openId: open.id, closedId: toClose.id };
   }
@@ -111,11 +114,12 @@ describe('GetUserTasksUseCase (ADR-012)', () => {
   });
 
   it('follows the task when it is handed to somebody else', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
     await changeStatus.execute({
       taskId: created.id,
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 

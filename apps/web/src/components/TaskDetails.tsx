@@ -9,13 +9,26 @@ export interface TaskDetailsProps {
   readonly taskId: string;
   readonly descriptors: readonly TaskTypeDescriptor[];
   readonly users: readonly UserDto[];
+  readonly currentUserId: string;
 }
 
 function userName(users: readonly UserDto[], id: string): string {
   return users.find((user) => user.id === id)?.name ?? id.slice(0, 8);
 }
 
-export function TaskDetails({ taskId, descriptors, users }: TaskDetailsProps): JSX.Element {
+/** Date and time, because history spanning a day is otherwise ambiguous. */
+function formatMoment(iso: string): string {
+  const at = new Date(iso);
+
+  return `${at.toLocaleDateString()} ${at.toLocaleTimeString()}`;
+}
+
+export function TaskDetails({
+  taskId,
+  descriptors,
+  users,
+  currentUserId,
+}: TaskDetailsProps): JSX.Element {
   const { data: task, isPending, error } = useTask(taskId);
 
   if (isPending) {
@@ -69,7 +82,12 @@ export function TaskDetails({ taskId, descriptors, users }: TaskDetailsProps): J
         </dd>
       </dl>
 
-      <StatusControls task={task} descriptor={descriptor} users={users} />
+      <StatusControls
+        task={task}
+        descriptor={descriptor}
+        users={users}
+        currentUserId={currentUserId}
+      />
 
       <details className="collected">
         <summary>Collected data</summary>
@@ -97,20 +115,28 @@ export function TaskDetails({ taskId, descriptors, users }: TaskDetailsProps): J
               <th>When</th>
               <th>Move</th>
               <th>Kind</th>
+              <th>By</th>
               <th>Handed to</th>
             </tr>
           </thead>
           <tbody>
             {task.transitions.map((transition) => (
               <tr key={transition.id}>
-                <td>{new Date(transition.createdAt).toLocaleTimeString()}</td>
-                <td>
+                <td className="when">{formatMoment(transition.createdAt)}</td>
+                <td className="move">
                   {transition.fromStatus ?? '—'} → {transition.toStatus ?? '—'}
                 </td>
                 <td>
                   <code>{transition.kind}</code>
                 </td>
-                <td>{userName(users, transition.assignedUserId)}</td>
+                {/* Who did it, as distinct from who received it. On a CLOSE the task
+                    changes hands to nobody, so the actor is the only name there is. */}
+                <td className="actor">{userName(users, transition.actorUserId)}</td>
+                <td className={transition.kind === 'CLOSE' ? 'muted' : undefined}>
+                  {transition.kind === 'CLOSE'
+                    ? 'nobody — closed'
+                    : userName(users, transition.assignedUserId)}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -42,6 +42,7 @@ function toTransitionDto(transition: PersistedTransition): TaskTransitionDto {
     kind: transition.kind,
     payload: transition.payload as Record<string, unknown>,
     assignedUserId: transition.assignedUserId,
+    actorUserId: transition.actorUserId,
     createdAt: transition.createdAt.toISOString(),
   };
 }

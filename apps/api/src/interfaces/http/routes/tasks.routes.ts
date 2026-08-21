@@ -70,7 +70,7 @@ export function createTasksRouter(deps: TasksRouterDependencies): Router {
     '/tasks/:id/close',
     asyncRoute(async (req, res) => {
       const { id } = parseRequest(TaskIdParamsSchema, req.params, 'params');
-      const body = parseRequest(CloseTaskBodySchema, req.body ?? {}, 'body');
+      const body = parseRequest(CloseTaskBodySchema, req.body, 'body');
 
       const task = await deps.closeTask.execute({ taskId: id, ...body });
 

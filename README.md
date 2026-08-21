@@ -147,7 +147,20 @@ The trade-off is real: JSONB gives no database-level shape guarantee. It is miti
 
 ### An append-only transition log
 
-`task_transitions` records every create, move and close: from-status, to-status, the data supplied, and the assignee. `tasks.data` is a **read projection**; the transition table is the source of truth.
+`task_transitions` records every create, move and close: from-status, to-status, the data
+supplied, who received the task, and who performed the transition. `tasks.data` is a **read
+projection**; the transition table is the source of truth.
+
+The last two are deliberately separate fields. `assignedUserId` answers *who has it now*,
+which is not *who did this* - they differ on every handover, and a `CLOSE` hands the task to
+nobody, so without an actor the log cannot say who closed it. Deriving the actor from the
+previous holder was rejected: the API lets anyone move anyone's task, so that inference is
+wrong precisely when an audit matters.
+
+Since there is no authentication (see Scope), the actor is **self-asserted by the caller** -
+provenance, not proof. Worth stating plainly rather than letting the column imply more than it
+can deliver. Adding auth later means taking the actor from the session instead of the body;
+nothing else moves.
 
 This falls out of the spec — rule 7 requires recording the next assigned user on every change — and it makes the backward-move question tractable: clearing projected data destroys no history.
 
@@ -236,7 +249,7 @@ curl localhost:3000/api/task-types
 
 # Create. 201 with the task.
 curl -X POST localhost:3000/api/tasks -H 'Content-Type: application/json' \
-  -d '{"type":"PROCUREMENT","assignedUserId":"11111111-1111-4111-8111-111111111111"}'
+  -d '{"type":"PROCUREMENT","assignedUserId":"1111...","actorUserId":"1111..."}'
 ```
 ```json
 {"id":"b9810de1-...","type":"PROCUREMENT","status":1,"state":"OPEN",
@@ -247,7 +260,8 @@ curl -X POST localhost:3000/api/tasks -H 'Content-Type: application/json' \
 ```bash
 # Move forward. Direction is derived from toStatus, never declared.
 curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: application/json' \
-  -d '{"toStatus":2,"assignedUserId":"11111111-...","data":{"quotes":["A-100","B-90"]}}'
+  -d '{"toStatus":2,"assignedUserId":"2222...","actorUserId":"1111...",
+       "data":{"quotes":["A-100","B-90"]}}'
 ```
 ```json
 {"id":"b9810de1-...","status":2,"state":"OPEN","data":{"2":{"quotes":["A-100","B-90"]}},
@@ -257,7 +271,7 @@ curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: applicat
 ```bash
 # Out of range -> 409, and the message is derived from the type's own ladder.
 curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: application/json' \
-  -d '{"toStatus":9,"assignedUserId":"11111111-..."}'
+  -d '{"toStatus":9,"assignedUserId":"1111...","actorUserId":"1111..."}'
 ```
 ```json
 {"error":{"code":"INVALID_TRANSITION","message":"Status 9 is out of range for PROCUREMENT (1..3)"}}
@@ -266,7 +280,7 @@ curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: applicat
 ```bash
 # Entering a status without the data it requires -> 422, with the field named.
 curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: application/json' \
-  -d '{"toStatus":3,"assignedUserId":"11111111-..."}'
+  -d '{"toStatus":3,"assignedUserId":"1111...","actorUserId":"1111..."}'
 ```
 ```json
 {"error":{"code":"VALIDATION_FAILED",
@@ -275,8 +289,9 @@ curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: applicat
 ```
 
 ```bash
-# Close: only at the final status, and it names no new assignee (ADR-011).
-curl -X POST localhost:3000/api/tasks/$ID/close
+# Close: only at the final status, and it names no new assignee (ADR-011) -
+# but it does name an actor, because somebody closed it.
+curl -X POST localhost:3000/api/tasks/$ID/close -H 'Content-Type: application/json'   -d '{"actorUserId":"1111..."}'
 
 # A user's tasks - open and closed by default (ADR-012).
 curl "localhost:3000/api/users/11111111-.../tasks?state=OPEN"
@@ -423,7 +438,7 @@ npm run test:int      # integration — requires docker compose up
 
 The domain suite covers each of the seven workflow rules by name. The integration suite covers each error code above. One structural test registers a throwaway task type at runtime, asserting that extensibility is a property of the code rather than a claim in this file.
 
-**226 tests.** 177 run without a database, in about a second.
+**229 tests.** 177 run without a database, in about a second.
 
 | Suite | Tests | What it proves |
 |---|---|---|
@@ -435,7 +450,7 @@ The domain suite covers each of the seven workflow rules by name. The integratio
 | `application/testing/*` | 8 | the in-memory doubles satisfy the repository contract |
 | `apps/web/no-task-type-knowledge.test.ts` | 43 | no client file knows a task type exists |
 | `infrastructure/.../task.repository.int.test.ts` | 22 | the version guard, rollback, and JSONB round-trip against Postgres |
-| `interfaces/http/api.int.test.ts` | 27 | every endpoint and every error code, end to end |
+| `interfaces/http/api.int.test.ts` | 30 | every endpoint and every error code, end to end, plus the audit trail |
 
 Not chasing a coverage percentage. Chasing something more specific: **every workflow rule and
 every error code has a test that names it.** Three of these suites are structural rather than

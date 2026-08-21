@@ -62,6 +62,7 @@ function toPersistedTransition(entity: TaskTransitionEntity): PersistedTransitio
     kind: entity.kind,
     payload: entity.payload,
     assignedUserId: entity.assignedUserId,
+    actorUserId: entity.actorUserId,
     createdAt: entity.createdAt,
   };
 }
@@ -177,6 +178,7 @@ export class TypeOrmTaskRepository implements TaskRepository {
         kind: transition.kind,
         payload: { ...transition.payload },
         assignedUserId: transition.assignedUserId,
+        actorUserId: transition.actorUserId,
       }),
     );
   }

@@ -6,6 +6,7 @@ import { env } from '../../config/env';
 import { TaskEntity } from './entities/task.entity';
 import { TaskTransitionEntity } from './entities/task-transition.entity';
 import { UserEntity } from './entities/user.entity';
+import { AddTransitionActor1755820000000 } from './migrations/1755820000000-add-transition-actor';
 import { InitialSchema1755730000000 } from './migrations/1755730000000-initial-schema';
 
 /**
@@ -28,5 +29,5 @@ export const AppDataSource = new DataSource({
   logging: env.NODE_ENV === 'development' ? ['error', 'warn', 'migration'] : ['error'],
 
   entities: [UserEntity, TaskEntity, TaskTransitionEntity],
-  migrations: [InitialSchema1755730000000],
+  migrations: [InitialSchema1755730000000, AddTransitionActor1755820000000],
 });

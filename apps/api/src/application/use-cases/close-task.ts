@@ -1,4 +1,4 @@
-import { TaskNotFoundError } from '../../domain/workflow/errors';
+import { TaskNotFoundError, UserNotFoundError } from '../../domain/workflow/errors';
 import { closeTask } from '../../domain/workflow/workflow-engine';
 import type { TaskTypeRegistry } from '../../domain/task-types/registry';
 import type { PersistedTask } from '../ports/task-repository';
@@ -7,6 +7,8 @@ import { assertExpectedVersion } from './expected-version';
 
 export interface CloseTaskInput {
   readonly taskId: string;
+  /** Closing hands the task to nobody, but somebody still does the closing. */
+  readonly actorUserId: string;
   readonly expectedVersion?: number;
 }
 
@@ -24,7 +26,7 @@ export class CloseTaskUseCase {
   ) {}
 
   async execute(input: CloseTaskInput): Promise<PersistedTask> {
-    return this.unitOfWork.runInTransaction(async ({ tasks }) => {
+    return this.unitOfWork.runInTransaction(async ({ tasks, users }) => {
       const task = await tasks.findById(input.taskId);
 
       if (task === null) {
@@ -33,7 +35,15 @@ export class CloseTaskUseCase {
 
       assertExpectedVersion(task, input.expectedVersion);
 
-      const { task: next, transition } = closeTask(this.registry.get(task.type), task);
+      const { task: next, transition } = closeTask(
+        this.registry.get(task.type),
+        task,
+        input.actorUserId,
+      );
+
+      if (!(await users.exists(input.actorUserId))) {
+        throw new UserNotFoundError(input.actorUserId);
+      }
 
       return tasks.applyTransition(next, transition);
     });

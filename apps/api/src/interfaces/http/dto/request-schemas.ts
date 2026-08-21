@@ -32,6 +32,7 @@ export const CreateTaskBodySchema = z
   .object({
     type: z.string().trim().min(1, 'a task type is required'),
     assignedUserId: uuid,
+    actorUserId: uuid,
   })
   .strict();
 
@@ -40,6 +41,7 @@ export const ChangeTaskStatusBodySchema = z
     // Only "is it a number". Whether it is a legal status is the engine's call.
     toStatus: z.number({ invalid_type_error: 'toStatus must be a number' }),
     assignedUserId: uuid,
+    actorUserId: uuid,
     // Opaque on purpose: the target status's schema is compiled from descriptors.
     data: z.record(z.unknown()).optional(),
     expectedVersion: z.number().int().nonnegative().optional(),
@@ -47,7 +49,10 @@ export const ChangeTaskStatusBodySchema = z
   .strict();
 
 export const CloseTaskBodySchema = z
-  .object({ expectedVersion: z.number().int().nonnegative().optional() })
+  .object({
+    actorUserId: uuid,
+    expectedVersion: z.number().int().nonnegative().optional(),
+  })
   .strict();
 
 /** ADR-012 - absent means every task; an unrecognised value is rejected, not ignored. */

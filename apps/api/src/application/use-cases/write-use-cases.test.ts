@@ -53,13 +53,14 @@ beforeEach(() => {
 });
 
 async function procurementAtStatus(status: number) {
-  let task = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+  let task = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
   if (status >= 2) {
     task = await changeStatus.execute({
       taskId: task.id,
       toStatus: 2,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: QUOTES,
     });
   }
@@ -69,6 +70,7 @@ async function procurementAtStatus(status: number) {
       taskId: task.id,
       toStatus: 3,
       assignedUserId: ALICE,
+      actorUserId: ALICE,
       data: RECEIPT,
     });
   }
@@ -78,7 +80,7 @@ async function procurementAtStatus(status: number) {
 
 describe('CreateTaskUseCase', () => {
   it('creates an open task at status 1 with its CREATE history row', async () => {
-    const task = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const task = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
     expect(task).toMatchObject({
       type: 'PROCUREMENT',
@@ -95,7 +97,7 @@ describe('CreateTaskUseCase', () => {
 
   it('rejects an unknown task type as NOT_FOUND, without touching the database', async () => {
     await expect(
-      create.execute({ type: NEVER_REGISTERED, assignedUserId: ALICE }),
+      create.execute({ type: NEVER_REGISTERED, assignedUserId: ALICE, actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(TaskTypeNotFoundError);
 
     expect(db.tasks.size).toBe(0);
@@ -103,7 +105,7 @@ describe('CreateTaskUseCase', () => {
 
   it('rejects an unknown assignee as NOT_FOUND and writes nothing', async () => {
     await expect(
-      create.execute({ type: 'PROCUREMENT', assignedUserId: 'user-ghost' }),
+      create.execute({ type: 'PROCUREMENT', assignedUserId: 'user-ghost', actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(UserNotFoundError);
 
     expect(db.tasks.size).toBe(0);
@@ -113,12 +115,13 @@ describe('CreateTaskUseCase', () => {
 
 describe('ChangeTaskStatusUseCase', () => {
   it('moves forward, records the next assignee and stores the payload by status', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
     const moved = await changeStatus.execute({
       taskId: created.id,
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
       data: QUOTES,
     });
 
@@ -137,6 +140,7 @@ describe('ChangeTaskStatusUseCase', () => {
       taskId: atThree.id,
       toStatus: 2,
       assignedUserId: BOB,
+      actorUserId: ALICE,
     });
 
     expect(moved.status).toBe(2);
@@ -155,59 +159,60 @@ describe('ChangeTaskStatusUseCase', () => {
 
   it('reports an unknown task as NOT_FOUND', async () => {
     await expect(
-      changeStatus.execute({ taskId: 'task-ghost', toStatus: 2, assignedUserId: BOB }),
+      changeStatus.execute({ taskId: 'task-ghost', toStatus: 2, assignedUserId: BOB, actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(TaskNotFoundError);
   });
 
   it('passes the workflow rules straight through', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
     await expect(
-      changeStatus.execute({ taskId: created.id, toStatus: 3, assignedUserId: BOB }),
+      changeStatus.execute({ taskId: created.id, toStatus: 3, assignedUserId: BOB, actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(InvalidTransitionError);
 
     await expect(
-      changeStatus.execute({ taskId: created.id, toStatus: 2, assignedUserId: BOB }),
+      changeStatus.execute({ taskId: created.id, toStatus: 2, assignedUserId: BOB, actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(ValidationFailedError);
   });
 
   it('refuses to move a closed task', async () => {
     const atThree = await procurementAtStatus(3);
-    await close.execute({ taskId: atThree.id });
+    await close.execute({ taskId: atThree.id, actorUserId: ALICE });
 
     await expect(
-      changeStatus.execute({ taskId: atThree.id, toStatus: 2, assignedUserId: BOB }),
+      changeStatus.execute({ taskId: atThree.id, toStatus: 2, assignedUserId: BOB, actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(TaskClosedError);
   });
 
   it('rejects an unknown assignee as NOT_FOUND', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
     await expect(
       changeStatus.execute({
         taskId: created.id,
         toStatus: 2,
         assignedUserId: 'user-ghost',
+        actorUserId: ALICE,
         data: QUOTES,
       }),
     ).rejects.toBeInstanceOf(UserNotFoundError);
   });
 
   it('prefers the workflow error when the move is illegal AND the assignee is unknown', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
     // Skipping a status is decided by the engine, for free, before any second query.
     await expect(
-      changeStatus.execute({ taskId: created.id, toStatus: 3, assignedUserId: 'user-ghost' }),
+      changeStatus.execute({ taskId: created.id, toStatus: 3, assignedUserId: 'user-ghost', actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(InvalidTransitionError);
   });
 
   it('rolls back completely when the move is refused', async () => {
-    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+    const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
     const before = { version: created.version, history: db.transitionsFor(created.id).length };
 
     await expect(
-      changeStatus.execute({ taskId: created.id, toStatus: 2, assignedUserId: BOB }),
+      changeStatus.execute({ taskId: created.id, toStatus: 2, assignedUserId: BOB, actorUserId: ALICE }),
     ).rejects.toBeInstanceOf(ValidationFailedError);
 
     expect(db.tasks.get(created.id)?.version).toBe(before.version);
@@ -217,13 +222,14 @@ describe('ChangeTaskStatusUseCase', () => {
 
   describe('concurrency (ADR-015)', () => {
     it('rejects a stale expectedVersion before doing any work', async () => {
-      const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+      const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
       await expect(
         changeStatus.execute({
           taskId: created.id,
           toStatus: 2,
           assignedUserId: BOB,
+          actorUserId: ALICE,
           data: QUOTES,
           expectedVersion: 99,
         }),
@@ -233,12 +239,13 @@ describe('ChangeTaskStatusUseCase', () => {
     });
 
     it('accepts a matching expectedVersion', async () => {
-      const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+      const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
       const moved = await changeStatus.execute({
         taskId: created.id,
         toStatus: 2,
         assignedUserId: BOB,
+        actorUserId: ALICE,
         data: QUOTES,
         expectedVersion: created.version,
       });
@@ -247,7 +254,7 @@ describe('ChangeTaskStatusUseCase', () => {
     });
 
     it('guards the write even when the caller sent no expectedVersion', async () => {
-      const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE });
+      const created = await create.execute({ type: 'PROCUREMENT', assignedUserId: ALICE, actorUserId: ALICE });
 
       // Somebody else moves the task after this request read it.
       const raced = new InMemoryTaskRepository(db);
@@ -259,6 +266,7 @@ describe('ChangeTaskStatusUseCase', () => {
           kind: 'FORWARD',
           payload: QUOTES,
           assignedUserId: BOB,
+          actorUserId: ALICE,
         },
       );
 
@@ -271,6 +279,7 @@ describe('ChangeTaskStatusUseCase', () => {
             kind: 'FORWARD',
             payload: QUOTES,
             assignedUserId: ALICE,
+            actorUserId: BOB,
           },
         ),
       ).rejects.toBeInstanceOf(VersionConflictError);
@@ -282,7 +291,7 @@ describe('CloseTaskUseCase', () => {
   it('closes at the final status and leaves the task where it is (ADR-011)', async () => {
     const atThree = await procurementAtStatus(3);
 
-    const closed = await close.execute({ taskId: atThree.id });
+    const closed = await close.execute({ taskId: atThree.id, actorUserId: ALICE });
 
     expect(closed).toMatchObject({ state: 'CLOSED', status: 3, assignedUserId: ALICE });
 
@@ -297,27 +306,27 @@ describe('CloseTaskUseCase', () => {
   it('refuses to close before the final status', async () => {
     const atTwo = await procurementAtStatus(2);
 
-    await expect(close.execute({ taskId: atTwo.id })).rejects.toBeInstanceOf(
+    await expect(close.execute({ taskId: atTwo.id, actorUserId: ALICE })).rejects.toBeInstanceOf(
       InvalidTransitionError,
     );
   });
 
   it('refuses to close twice', async () => {
     const atThree = await procurementAtStatus(3);
-    await close.execute({ taskId: atThree.id });
+    await close.execute({ taskId: atThree.id, actorUserId: ALICE });
 
-    await expect(close.execute({ taskId: atThree.id })).rejects.toBeInstanceOf(TaskClosedError);
+    await expect(close.execute({ taskId: atThree.id, actorUserId: ALICE })).rejects.toBeInstanceOf(TaskClosedError);
   });
 
   it('reports an unknown task as NOT_FOUND and honours expectedVersion', async () => {
-    await expect(close.execute({ taskId: 'task-ghost' })).rejects.toBeInstanceOf(
+    await expect(close.execute({ taskId: 'task-ghost', actorUserId: ALICE })).rejects.toBeInstanceOf(
       TaskNotFoundError,
     );
 
     const atThree = await procurementAtStatus(3);
 
     await expect(
-      close.execute({ taskId: atThree.id, expectedVersion: 1 }),
+      close.execute({ taskId: atThree.id, actorUserId: ALICE, expectedVersion: 1 }),
     ).rejects.toBeInstanceOf(VersionConflictError);
   });
 });
