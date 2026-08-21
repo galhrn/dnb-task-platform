@@ -8,6 +8,7 @@ import {
 } from '../task-types/task-type-definition';
 import {
   clearDataAfter,
+  isClosed,
   statusDataOf,
   withStatusData,
   type NewTaskSnapshot,
@@ -22,7 +23,7 @@ import { InvalidTransitionError, TaskClosedError, ValidationFailedError } from '
  * objects - no IO, no clock, no identity generation, nothing to mock.
  */
 
-export const INITIAL_STATUS = 1;
+const INITIAL_STATUS = 1;
 
 /** One row of the append-only history (section 10). */
 export interface TransitionRecord {
@@ -208,7 +209,7 @@ export function changeTaskStatus(
   assertDefinitionMatches(definition, task);
 
   // WF-2
-  if (task.state === 'CLOSED') {
+  if (isClosed(task)) {
     throw new TaskClosedError(task.id);
   }
 
@@ -236,7 +237,7 @@ export function closeTask(definition: TaskTypeDefinition, task: TaskSnapshot): T
   assertDefinitionMatches(definition, task);
 
   // WF-2 / WF-6a - closing a closed task is an error, not idempotent success.
-  if (task.state === 'CLOSED') {
+  if (isClosed(task)) {
     throw new TaskClosedError(task.id);
   }
 

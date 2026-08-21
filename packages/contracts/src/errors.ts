@@ -3,6 +3,7 @@
  * maps code -> status. Routes never build an error body by hand.
  */
 
+/** Exported as a value, not only a type, so a consumer can enumerate the codes. */
 export const ERROR_CODES = [
   'BAD_REQUEST',
   'NOT_FOUND',

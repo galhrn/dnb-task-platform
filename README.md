@@ -20,7 +20,19 @@ npm run dev                   # api :3000, web :5173
 
 Open <http://localhost:5173>.
 
-> _TODO(M6): verify this sequence on a clean clone before submitting._
+Then open <http://localhost:5173>. `npm run dev` runs the API on :3000 and the client on
+:5173; the client proxies `/api` to the API, so the browser only ever sees one origin.
+
+Useful afterwards:
+
+```bash
+npm test          # 175 unit tests, no container needed
+npm run test:int  #  49 integration tests, needs the database
+npm run db:reset  # drop the volume and start clean
+```
+
+Every request in the API lives in [`requests.http`](requests.http) - one per endpoint and one
+per error code, runnable from VS Code's REST Client or copyable into curl.
 
 ---
 
@@ -65,9 +77,17 @@ To add a type:
 
 No migration. No change to the workflow engine, use cases, routes, or any frontend file.
 
-**This is demonstrated, not asserted.** The `MARKETING` task type was added in commit `<sha>` — the diff touches exactly two files.
+**This is demonstrated, not asserted.** The `MARKETING` task type was added as the final
+commit on `main`, on its own, after everything else was finished. See exactly what it took:
 
-> _TODO(M7): fill in the sha._
+```bash
+git log --oneline -1        # the commit
+git show --stat HEAD        # its diff: two files, no frontend, no migration
+```
+
+The ordering is deliberate. Documentation, polish and the client were all finished first, so
+that the last commit contains nothing but the new task type - there is no way to claim the
+diff was kept small by leaving work out of it.
 
 ---
 
@@ -94,7 +114,20 @@ The workflow engine enforces sequencing, closure and assignment. **It has never 
 
 There is no `switch (task.type)` anywhere in the codebase.
 
-> _TODO(M6): consider `grep -rn "task.type ===" apps/api/src` output as evidence. If it returns nothing, say so here._
+Checked, not assumed:
+
+```bash
+$ grep -rnE "task\.type\s*===|switch\s*\(\s*[a-z]*\.?type\s*\)" apps/api/src --include='*.ts'
+$                       # no matches
+```
+
+Neither side branches on a task type, and both sides have a test that fails if one ever does:
+[`purity.test.ts`](apps/api/src/domain/purity.test.ts) reads every import in `domain/` and
+rejects anything outside Zod and the type-only contracts package, while
+[`no-task-type-knowledge.test.ts`](apps/web/src/no-task-type-knowledge.test.ts) reads every
+client source file and rejects any mention of a task type, of a field belonging to one, or of
+a comparison between a type and a literal. Both were mutation-checked - deliberately broken to
+confirm they fail - because a structural test that has never been red proves nothing.
 
 ### Dependency injection without a framework
 
@@ -312,7 +345,35 @@ Ambiguities in the spec, and how they were resolved:
 
 ## Task types
 
-> _TODO(M1/M7): status tables for Procurement, Development, Marketing._
+Required data is scoped to **entering** a status, so status 1 never requires anything.
+
+### Procurement — final status 3
+
+| Status | Meaning | Required to enter |
+|---|---|---|
+| 1 | Created | — |
+| 2 | Supplier offers received | `quotes`: exactly two non-empty strings |
+| 3 | Purchase completed | `receipt`: non-empty string |
+
+### Development — final status 4
+
+| Status | Meaning | Required to enter |
+|---|---|---|
+| 1 | Created | — |
+| 2 | Specification completed | `specification`: non-empty text (rendered as a textarea) |
+| 3 | Development completed | `branchName`: non-empty string |
+| 4 | Distribution completed | `version`: non-empty string |
+
+### Marketing — final status 2
+
+| Status | Meaning | Required to enter |
+|---|---|---|
+| 1 | Created | — |
+| 2 | Campaign launched | `campaignUrl`: non-empty string |
+
+Marketing is the extensibility proof, added last and alone. Two statuses is a third distinct
+ladder length, so it exercises "the final status is the length of this list" rather than any
+bound somebody happened to hard-code.
 
 ---
 
@@ -362,7 +423,29 @@ npm run test:int      # integration — requires docker compose up
 
 The domain suite covers each of the seven workflow rules by name. The integration suite covers each error code above. One structural test registers a throwaway task type at runtime, asserting that extensibility is a property of the code rather than a claim in this file.
 
-> _TODO(M6): final counts and any coverage note._
+**224 tests.** 175 run without a database, in about a second.
+
+| Suite | Tests | What it proves |
+|---|---|---|
+| `domain/workflow/workflow-engine.test.ts` | 38 | WF-1..WF-7 and every derived rule, by name |
+| `domain/task-types/*` | 41 | the descriptor vocabulary, the registry, and that the catalogue matches this page |
+| `domain/purity.test.ts` | 11 | `domain/` imports no framework |
+| `domain/extensibility.test.ts` | 7 | a five-status type registered at runtime runs its whole lifecycle |
+| `application/use-cases/*` | 27 | orchestration, transaction boundaries, which error wins when two things are wrong |
+| `application/testing/*` | 8 | the in-memory doubles satisfy the repository contract |
+| `apps/web/no-task-type-knowledge.test.ts` | 43 | no client file knows a task type exists |
+| `infrastructure/.../task.repository.int.test.ts` | 22 | the version guard, rollback, and JSONB round-trip against Postgres |
+| `interfaces/http/api.int.test.ts` | 27 | every endpoint and every error code, end to end |
+
+Not chasing a coverage percentage. Chasing something more specific: **every workflow rule and
+every error code has a test that names it.** Three of these suites are structural rather than
+behavioural - they assert properties of the codebase itself, and each was deliberately broken
+once to confirm it fails.
+
+The repository contract suite is worth singling out. Hand-written fakes usually drift until
+they quietly agree with whatever the code does, so the same suite runs twice: against the
+in-memory doubles in `npm test`, and against Postgres in `npm run test:int`. If the two ever
+disagree, a build goes red.
 
 ---
 
@@ -374,4 +457,30 @@ Deliberately excluded: authentication, user management (users are seeded), pagin
 
 ## Repository layout
 
-> _TODO(M6): trimmed tree — top three levels, one line of purpose each._
+```
+├─ docker-compose.yml         PostgreSQL 16. The app itself is not containerised.
+├─ scripts/dev.mjs            runs both halves with one command, no extra dependency
+├─ requests.http              every endpoint and every error code, runnable
+├─ project_context.md         decisions in their final form; the ADR log lives here
+├─ milestone_logs.md          how each milestone actually went, including what went wrong
+│
+├─ packages/contracts/        types shared by both sides. No runtime code, no build step.
+│
+├─ apps/api/src/
+│  ├─ domain/                 the workflow engine, task types, registry. No framework.
+│  ├─ application/            use cases, repository ports, the transaction boundary
+│  ├─ infrastructure/         TypeORM entities, migrations, repositories, seeds
+│  ├─ interfaces/http/        routers, request schemas, the one error→status map
+│  ├─ composition-root.ts     every concrete choice, in one file, in dependency order
+│  └─ main.ts                 bootstrap only
+│
+└─ apps/web/src/
+   ├─ api/client.ts           the only file that knows HTTP exists
+   ├─ hooks/                  React Query: server state, no store
+   ├─ components/             DynamicFieldForm renders whatever the server described
+   └─ pages/TasksPage.tsx
+```
+
+Two files are worth opening first: [`workflow-engine.ts`](apps/api/src/domain/workflow/workflow-engine.ts)
+for the general rules, and [`procurement.task-type.ts`](apps/api/src/domain/task-types/procurement.task-type.ts)
+for everything a task type contributes.

@@ -30,7 +30,7 @@ import { createApp, type UseCases } from './interfaces/http/app';
  * `listTaskTypes` takes only the registry, because task types live in code and never
  * touch the database at all.
  */
-export function buildUseCases(dataSource: DataSource): UseCases {
+function buildUseCases(dataSource: DataSource): UseCases {
   const registry = new TaskTypeRegistry(TASK_TYPE_DEFINITIONS);
 
   const unitOfWork = new TypeOrmUnitOfWork(dataSource);

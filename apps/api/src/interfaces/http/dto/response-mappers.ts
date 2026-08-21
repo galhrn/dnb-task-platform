@@ -34,7 +34,7 @@ export function toTaskDto(task: PersistedTask): TaskDto {
   };
 }
 
-export function toTransitionDto(transition: PersistedTransition): TaskTransitionDto {
+function toTransitionDto(transition: PersistedTransition): TaskTransitionDto {
   return {
     id: transition.id,
     fromStatus: transition.fromStatus,

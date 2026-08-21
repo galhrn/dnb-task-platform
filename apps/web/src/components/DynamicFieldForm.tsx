@@ -18,7 +18,6 @@ export type FieldValues = Record<string, unknown>;
 interface FieldProps<D extends FieldDescriptor> {
   readonly descriptor: D;
   readonly value: unknown;
-  readonly error: string | undefined;
   readonly disabled: boolean;
   readonly onChange: (value: unknown) => void;
 }
@@ -220,7 +219,6 @@ export function DynamicFieldForm({
             {renderField({
               descriptor: field,
               value: values[field.name],
-              error,
               disabled,
               onChange: (value) => onChange({ ...values, [field.name]: value }),
             })}

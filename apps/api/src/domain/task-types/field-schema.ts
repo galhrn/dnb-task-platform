@@ -148,7 +148,7 @@ function buildBaseSchema(field: FieldDescriptor): ZodTypeAny {
   return builders[field.kind](field);
 }
 
-export function compileFieldSchema(field: FieldDescriptor): ZodTypeAny {
+function compileFieldSchema(field: FieldDescriptor): ZodTypeAny {
   const schema = buildBaseSchema(field);
   return field.required ? schema : schema.optional();
 }
