@@ -25,7 +25,7 @@
 | [M2](#m2--infrastructure) | `6e8fd9e` | Entities, migration, repositories, the version guard |
 | [M3](#m3--application-layer) | `059859b` | Use cases, transaction boundaries, contract-checked fakes |
 | [M4](#m4--http--api-layer) | `84634d1` | Routers, request schemas, error middleware, composition root |
-| [M5](#m5--client-react-layer) | `PENDING` | Vite + React Query, dynamic forms, structural proof |
+| [M5](#m5--client-react-layer) | `9ad9383` | Vite + React Query, dynamic forms, structural proof |
 
 ---
 
@@ -489,7 +489,7 @@ differing only in trailing commas from reflowing to fit the page.
 
 ## M5 - Client (React) layer
 
-**Commit:** `PENDING` (`feat/m5-client`) - **Definition of done:** full lifecycle drivable from
+**Commit:** `9ad9383` (`feat/m5-client`) - **Definition of done:** full lifecycle drivable from
 the UI; no per-type conditionals in any component.
 
 ### Result
