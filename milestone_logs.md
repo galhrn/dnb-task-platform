@@ -26,6 +26,7 @@
 | [M3](#m3--application-layer) | `059859b` | Use cases, transaction boundaries, contract-checked fakes |
 | [M4](#m4--http--api-layer) | `84634d1` | Routers, request schemas, error middleware, composition root |
 | [M5](#m5--client-react-layer) | `9ad9383` | Vite + React Query, dynamic forms, structural proof |
+| [M6](#m6--docs--polish) | `PENDING` | README, request collection, dead-code prune, clean-clone check |
 
 ---
 
@@ -578,6 +579,89 @@ was added for this milestone. What *is* verified: it typechecks, it builds for p
 structural suite passes, and the complete lifecycle works through the proxy the browser uses.
 The DoD phrase "drivable from the UI" is therefore attested by the API path the UI drives, not
 by the UI itself - worth saying plainly rather than implying more.
+
+---
+
+## M6 - Docs & polish
+
+**Commit:** `PENDING` (`feat/m6-docs`) - **Definition of done:** clean clone → running app
+following the README only.
+
+### The definition of done, actually performed
+
+Not read through - executed. The repository was cloned into a scratch directory, the running
+containers were stopped first so the clone got its own volume, and the README's quick start was
+followed line by line with nothing added:
+
+```
+git clone → .env.example copied → docker compose up -d → npm install
+npm run migration:run     applied 1: InitialSchema1755730000000   (fresh, empty database)
+npm run seed              3 demo users
+npm run dev               api :3000, web :5173
+GET localhost:5173/       200        GET localhost:5173/api/task-types  200
+npm test                  132 + 43 passed
+npm run test:int           49 passed
+lifecycle through :5173   create → 2 → 3 → close, history CREATE/FORWARD/FORWARD/CLOSE
+```
+
+Then the clone and its volume were destroyed and the development database restored. A quick
+start that has never been run from a clone is a wish, not an instruction.
+
+### Why M6 came before M7, and what it forced
+
+The Marketing commit has to contain nothing but the new task type - otherwise the diff proves
+nothing, because a reviewer cannot tell whether it stayed small on merit or because work was
+left out of it. That constraint reaches backwards into the README:
+
+**The README cannot quote the Marketing commit's sha.** Filling in a sha at M7 would mean
+editing the README in the very commit that is supposed to touch two backend files. So the claim
+resolves itself instead:
+
+```bash
+git log --oneline -1        # the commit
+git show --stat HEAD        # its diff: two files, no frontend, no migration
+```
+
+This is better than a sha anyway: it cannot rot, and the reviewer runs it rather than trusting
+a number. The general lesson is that a proof-by-diff constrains everything the diff must not
+contain, and that has to be arranged in advance.
+
+The same reasoning applies to the milestone log and the checkbox in section 13. Those cannot be
+pre-written, so **M7 will be two commits**: the pure two-file commit first, then a separate
+`docs(m7)` commit. The mic-drop commit stands alone in history and is the one to look at.
+
+### Documentation
+
+The README now carries the full argument: the layering and its dependency rule, JSONB versus
+table-per-type and what that trade-off actually costs, the append-only transition log that
+makes clear-forward safe, the conditional `UPDATE ... WHERE version` and why it is not
+`save()`, the 400/409/422 line, and how a form reaches the screen from `GET /task-types`.
+
+Two claims that used to be assertions are now evidence:
+
+- **"There is no `switch (task.type)`"** ships with the grep that returns nothing, plus the two
+  structural tests that fail if it ever would.
+- **"224 tests"** is a table by suite saying what each one proves, not a coverage percentage.
+  Coverage measures which lines ran; this says which *rules* have a test that names them.
+
+`requests.http` replaces a Postman collection: every endpoint and every error code, runnable
+from VS Code's REST Client or copyable into curl, with no export file to drift out of sync.
+
+### Polish
+
+`noUnusedLocals` and `noUnusedParameters` are now on. They found nothing, which is the point -
+the rule is enforced from here rather than merely observed.
+
+A scan for exported symbols that nothing imports found five. Four became module-local
+(`buildUseCases`, `compileFieldSchema`, `INITIAL_STATUS`, `toTransitionDto`); `ERROR_CODES`
+stayed exported, because a contracts package exists to be consumed and unused-in-this-repo is
+not the same as dead. One symbol went the other way: `isClosed` in `domain/task.ts` was dead
+because the engine compared to a string literal in three places, so the engine now calls it and
+reads better for it.
+
+`DynamicFieldForm` was passing an `error` prop into every renderer that none of them read - the
+label owns the message. Removed. `noUnusedParameters` does not catch that, because a destructured
+property of an interface is not an unused parameter; it took reading the file.
 
 ## Recurring themes so far
 

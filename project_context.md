@@ -106,6 +106,7 @@ dnb-task-platform/
 ├─ package.json                     npm workspaces root, orchestration scripts
 ├─ tsconfig.base.json               strict compiler options; every workspace extends it
 ├─ .env.example                     one variable set, read by compose *and* the api
+├─ requests.http                    every endpoint and every error code, runnable
 ├─ project_context.md               this file — decisions in their final form
 ├─ milestone_logs.md                narrative record, appended at each milestone (§0)
 ├─ README.md                        reviewer-facing deliverable
@@ -386,8 +387,8 @@ completion summary is appended to `milestone_logs.md` before the next one starts
 - [x] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.* — **done 2026-08-21**; **seven** use cases (see §16), 132 unit + 22 integration tests green.
 - [x] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.* — **done 2026-08-21**; 27 API tests, all seven codes covered, plus a live curl lifecycle against the booted server.
 - [x] **M5 — Client.** API client, hooks, `DynamicFieldForm`, task list, status controls. *DoD: full lifecycle drivable from the UI; no per-type conditionals in any component.* — **done 2026-08-21**; 43 structural tests assert the second half. Browser click-through is still unverified by me — see §16.
-- [ ] **M6 — Docs & polish.** README complete, `.env.example`, seed script, request collection. *DoD: clean clone → running app following README only.*
-- [ ] **M7 — Marketing type.** Isolated commit. *DoD: diff touches exactly two server files and nothing else.*
+- [x] **M6 — Docs & polish.** README complete, `.env.example`, seed script, request collection. *DoD: clean clone → running app following README only.* — **done 2026-08-21**; the clone was actually performed, not read through.
+- [ ] **M7 — Marketing type.** Isolated commit. *DoD: diff touches exactly two server files and nothing else.* **Two commits:** the pure two-file commit first, then a separate `docs(m7)` for the checkbox, §16 and `milestone_logs.md` — the log rule cannot apply inside a commit whose whole point is what it does not contain.
 
 ---
 
@@ -436,6 +437,9 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
 | 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
 | 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | **M6 executed** on `feat/m6-docs`. README finalised, `requests.http` added, dead exports pruned, `noUnusedLocals`/`noUnusedParameters` enabled. Clean clone verified end to end. | Docs milestone. |
+| 2026-08-21 | *Consequence of M7's constraint:* the README refers to the Marketing commit through `git show --stat HEAD` rather than a sha. | Filling a sha in at M7 would mean editing the README inside the commit whose whole claim is that it touches two backend files. A proof-by-diff constrains everything the diff must not contain, and that has to be arranged in advance. It also cannot rot. |
+| 2026-08-21 | *Local choice:* `requests.http` (VS Code REST Client format) instead of a Postman collection. | Plain text, diffable, readable without an account, and copyable into curl. An exported collection is a second copy of the API that drifts. |
 | 2026-08-21 | **M5 executed** on `feat/m5-client`. Vite + React + React Query, dynamic forms, 43 structural tests, `scripts/dev.mjs`. | Client milestone. |
 | 2026-08-21 | *Deviation from §3:* React **19.2.8**, not 18. §3 updated. | React 19 is the current stable release and nothing in this client uses an API that differs between them. Shipping a deliberately old major in a new project invites the question "why 18?" and has no answer. |
 | 2026-08-21 | *Local choice:* the Vite dev server proxies `/api` to :3000. | The browser then only ever sees one origin, so CORS never enters the server — no middleware, no allow-list, no environment-dependent behaviour to explain. |
