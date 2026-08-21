@@ -69,7 +69,7 @@ Explicit non-goals (documented in README so they read as decisions, not gaps):
 | Database | PostgreSQL 16 via docker-compose | ADR-002 |
 | Validation | Zod | boundary + type-specific entry schemas |
 | Repo | npm workspaces monorepo | ADR-003 |
-| Client | React 18 + Vite + TypeScript | |
+| Client | React 19 + Vite 8 + TypeScript | §16 — §3 originally said 18 |
 | Client state | TanStack Query (React Query) | ADR-004 — server state only, no Redux |
 | Testing | Vitest (unit + integration), Supertest | |
 
@@ -170,16 +170,24 @@ dnb-task-platform/
 │     ├─ composition-root.ts             all wiring, explicit
 │     └─ main.ts                         bootstrap only
 │
+├─ scripts/dev.mjs                   runs api + web together, no extra dependency
+│
 └─ apps/web/
+   ├─ vite.config.ts                 proxies /api → :3000, so CORS never exists
    └─ src/
-      ├─ api/client.ts                   fetch wrapper + typed calls
-      ├─ hooks/                          useTaskTypes, useUserTasks, useTaskMutations
+      ├─ api/client.ts               fetch wrapper, ApiError, typed calls
+      ├─ hooks/
+      │  ├─ queries.ts               useTaskTypes / useUsers / useUserTasks / useTask
+      │  └─ use-task-mutations.ts    create / change status / close
       ├─ components/
-      │  ├─ DynamicFieldForm.tsx         renders from FieldDescriptor[] — type-agnostic
-      │  ├─ TaskList.tsx
-      │  ├─ TaskCard.tsx
-      │  └─ StatusControls.tsx
-      └─ pages/TasksPage.tsx
+      │  ├─ DynamicFieldForm.tsx     renders from FieldDescriptor[] — type-agnostic
+      │  ├─ StatusControls.tsx       advance / reverse / close, all derived
+      │  ├─ TaskDetails.tsx          ladder, collected data, history
+      │  ├─ CreateTaskForm.tsx
+      │  ├─ TaskList.tsx / TaskCard.tsx
+      │  └─ ErrorBanner.tsx          shows the server's code, never a friendlier lie
+      ├─ pages/TasksPage.tsx
+      └─ no-task-type-knowledge.test.ts  the client half of the M7 proof
 ```
 
 **Extensibility proof:** adding a task type touches `apps/api/src/domain/task-types/<name>.task-type.ts` (new) and `index.ts` (one line). Nothing else. No migration. No frontend file.
@@ -377,7 +385,7 @@ completion summary is appended to `milestone_logs.md` before the next one starts
 - [x] **M2 — Persistence.** Entities, InitialSchema migration, repository implementations, user seed. *DoD: migration runs clean on an empty DB; seeds insert demo users.* — **done 2026-08-21**; down-then-up verified, 14 integration tests green.
 - [x] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.* — **done 2026-08-21**; **seven** use cases (see §16), 132 unit + 22 integration tests green.
 - [x] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.* — **done 2026-08-21**; 27 API tests, all seven codes covered, plus a live curl lifecycle against the booted server.
-- [ ] **M5 — Client.** API client, hooks, `DynamicFieldForm`, task list, status controls. *DoD: full lifecycle drivable from the UI; no per-type conditionals in any component.*
+- [x] **M5 — Client.** API client, hooks, `DynamicFieldForm`, task list, status controls. *DoD: full lifecycle drivable from the UI; no per-type conditionals in any component.* — **done 2026-08-21**; 43 structural tests assert the second half. Browser click-through is still unverified by me — see §16.
 - [ ] **M6 — Docs & polish.** README complete, `.env.example`, seed script, request collection. *DoD: clean clone → running app following README only.*
 - [ ] **M7 — Marketing type.** Isolated commit. *DoD: diff touches exactly two server files and nothing else.*
 
@@ -394,6 +402,7 @@ completion summary is appended to `milestone_logs.md` before the next one starts
 | `application/` → ports | Contract | `application/testing/task-repository.contract.ts`, run in **both** suites | The in-memory doubles and the TypeORM repository behave identically on everything a use case relies on — so the fast tests are trustworthy |
 | Extensibility | Structural | `domain/extensibility.test.ts` — registers a 5-status throwaway type at runtime | Adding a type requires no engine change — the claim, asserted |
 | Purity | Structural | `domain/purity.test.ts` — reads every import in `domain/` | The layer is framework-free, and stays that way after the next contributor |
+| `apps/web` | Structural | `no-task-type-knowledge.test.ts` — reads every client source file | No component names a task type, names a type's field, or branches on either — the client half of the M7 proof |
 
 Not chasing a coverage number. Chasing: every row in §6 and every row in the §9 error table has a named test.
 
@@ -427,6 +436,13 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
 | 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
 | 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | **M5 executed** on `feat/m5-client`. Vite + React + React Query, dynamic forms, 43 structural tests, `scripts/dev.mjs`. | Client milestone. |
+| 2026-08-21 | *Deviation from §3:* React **19.2.8**, not 18. §3 updated. | React 19 is the current stable release and nothing in this client uses an API that differs between them. Shipping a deliberately old major in a new project invites the question "why 18?" and has no answer. |
+| 2026-08-21 | *Local choice:* the Vite dev server proxies `/api` to :3000. | The browser then only ever sees one origin, so CORS never enters the server — no middleware, no allow-list, no environment-dependent behaviour to explain. |
+| 2026-08-21 | *Local choice:* `scripts/dev.mjs` runs both halves instead of `concurrently`. | Thirty lines of `child_process` against a dependency a reviewer would have to install to read one log. Note for anyone reusing it: Node 20+ refuses to spawn a `.cmd` without a shell (CVE-2024-27980), and passing an args array with `shell: true` triggers DEP0190 — so the command goes through the shell as one constant string. |
+| 2026-08-21 | *Local choice:* React Query `retry: false`. | Every 4xx this API returns is a decision — a version conflict, a refused transition — and retrying only delays telling the user by three round trips. |
+| 2026-08-21 | *Honesty note:* M5 is verified by typecheck, production build, the structural suite and a full lifecycle driven through the Vite proxy. It has **not** been clicked through in a browser by me. | No browser automation is installed and none was added for this. The DoD line "drivable from the UI" is therefore attested by the API path the UI uses, not by the UI itself. |
+| 2026-08-21 | *Finding:* the first version of the client structural test flagged `descriptor.type === task.type` and prose in comments. | Matching a task to the descriptor the server sent is the generic behaviour, not a per-type branch — the smell is comparing a type to a *literal*. The rules now strip comments first and carry a test asserting they still catch four real violations while permitting three legitimate lookups. |
 | 2026-08-21 | **M4 executed** on `feat/m4-http`. Routers, Zod request schemas, error middleware, composition root, 27 Supertest tests. | HTTP milestone. |
 | 2026-08-21 | *Local choice:* the 400/409/422 boundary is drawn at **parseability**, not legality. `toStatus: "two"` is 400; `toStatus: 2.5` and `toStatus: 99` are 409; `data: "x"` is 400 but `data: {}` is 422. | Putting a type's field rules in the request schema would be a second source of truth needing an edit per task type — the exact thing this architecture exists to avoid. The DTO asks "can a use case accept this?"; everything else is the engine's call. |
 | 2026-08-21 | *Local choice:* `BadRequestError` and `RouteNotFoundError` live in `interfaces/http/errors.ts`, not in the domain, but extend `DomainError`. | A malformed request is not a domain concept — the domain never sees one. Extending the coded-error base keeps the middleware with exactly one shape to understand. |

@@ -322,7 +322,34 @@ Minimal by instruction, but with one deliberate property: **the client has no pe
 
 State is server state, managed with React Query — no global store.
 
-> _TODO(M5): note the hard-coded user id and where to change it._
+There is no authentication (deliberately - see Scope), so the app acts as a seeded user.
+The id is the single hard-coded value in the client:
+
+```ts
+// apps/web/src/pages/TasksPage.tsx
+const DEFAULT_USER_ID = '11111111-1111-4111-8111-111111111111'; // Ada, from `npm run seed`
+```
+
+The header has an **Acting as** picker for the other seeded users. That is not a login - it
+is the only way to watch a task change hands: advance a task and assign it to Grace, switch
+to Grace, and it is now in her list and gone from Ada's.
+
+### How a form gets on the screen
+
+1. `GET /task-types` returns each type's statuses and the `FieldDescriptor[]` needed to enter
+   each one.
+2. `StatusControls` derives everything from that: the next status is `current + 1`, reverse
+   targets are every status below, and close is offered only at `statuses.length`.
+3. `DynamicFieldForm` renders the target status's descriptors - a `string-array` becomes
+   repeatable inputs bounded by `minItems`/`maxItems`, a `multiline` string becomes a
+   textarea, a `date` becomes `<input type="date">`.
+4. A 422 comes back with `details` paths like `data.quotes.1`, and each field claims its own
+   path, so server-side validation lands under the right input without the client knowing
+   which fields exist.
+
+No component names a task type, names a field belonging to one, or branches on either -
+[`no-task-type-knowledge.test.ts`](apps/web/src/no-task-type-knowledge.test.ts) reads every
+client source file and fails if one does. It must still pass unedited when Marketing lands.
 
 ---
 

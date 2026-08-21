@@ -24,7 +24,8 @@
 | [M1 refinement](#m1-refinement--field-kind-dispatch) | `385e3b3` | Lookup-table dispatch, `boolean` and `date` |
 | [M2](#m2--infrastructure) | `6e8fd9e` | Entities, migration, repositories, the version guard |
 | [M3](#m3--application-layer) | `059859b` | Use cases, transaction boundaries, contract-checked fakes |
-| [M4](#m4--http--api-layer) | `ec1f7aa` | Routers, request schemas, error middleware, composition root |
+| [M4](#m4--http--api-layer) | `84634d1` | Routers, request schemas, error middleware, composition root |
+| [M5](#m5--client-react-layer) | `PENDING` | Vite + React Query, dynamic forms, structural proof |
 
 ---
 
@@ -376,7 +377,7 @@ pinning that precedence.
 
 ## M4 - HTTP / API layer
 
-**Commit:** `ec1f7aa` (`feat/m4-http`) - **Definition of done:** Supertest integration suite
+**Commit:** `84634d1` (`feat/m4-http`) - **Definition of done:** Supertest integration suite
 covering every error code in section 9.
 
 ### Result
@@ -483,6 +484,100 @@ Two overdue README placeholders were filled while here: `TODO(M4)` (worked reque
 examples per endpoint, taken from real output) and `TODO(M1)` (the Procurement definition as the
 README's centrepiece). The snippet was diffed against the source file - identical key for key,
 differing only in trailing commas from reflowing to fit the page.
+
+---
+
+## M5 - Client (React) layer
+
+**Commit:** `PENDING` (`feat/m5-client`) - **Definition of done:** full lifecycle drivable from
+the UI; no per-type conditionals in any component.
+
+### Result
+
+```
+npm run typecheck     clean across all three workspaces
+npm test              132 (api) + 43 (web) passed
+npm run test:int       49 passed
+npm run build -w web   74 modules, 240 kB, built in 310ms
+```
+
+Plus a full lifecycle driven **through the Vite proxy on :5173** - the exact path the browser
+takes - including a deliberate stale `expectedVersion` that came back
+`409 VERSION_CONFLICT: expected version 1, found 2`.
+
+### What makes the client type-agnostic
+
+Three components carry the whole claim.
+
+**`DynamicFieldForm`** renders whatever `GET /task-types` said a status requires. Its renderer
+table is `{ [K in FieldKind]: FieldRenderer<K> }` - deliberately the mirror of `field-schema.ts`
+on the server. That symmetry is the point: adding a field KIND is one entry on each side;
+adding a task TYPE is nothing on either. The mapped type makes a missing kind a compile error
+rather than a blank space in a form.
+
+**`StatusControls`** derives every affordance from the descriptor:
+
+```
+next status      = current + 1, if there is one   (WF-4)
+its form         = that status's own field list   (ADR-005)
+reverse targets  = every status below the current (WF-5)
+close permitted  = current === statuses.length    (WF-6)
+```
+
+There is no table of what each type allows, because the ladder's *length* is the only thing
+that differs between types. A two-status Marketing task will render one advance button and a
+close button with nothing touched.
+
+**`ErrorBanner`** shows the code the server chose rather than inventing a friendlier one. A
+client that rewrites "you cannot skip a status" into "something went wrong" throws away the
+useful half. Field-level `details` paths (`data.quotes.1`) are claimed by the field that owns
+them, so a 422 lands under the right input without the client knowing which fields exist.
+
+### The structural proof, and how it was wrong first
+
+`no-task-type-knowledge.test.ts` reads every client source file and fails if one names a task
+type, names a field belonging to one, or branches on either. When Marketing arrives at M7 this
+suite must pass **unedited** - that is the proof.
+
+The first version was wrong in two ways, and both are instructive:
+
+1. It flagged `descriptor.type === task.type`. That is *matching a task to whatever the server
+   described* - the generic behaviour, not a per-type branch. The smell is comparing a type to
+   a **literal**, so the rule became `type === ['"` + "`" + `]` - the quote is the part that matters.
+2. Made case-insensitive, it flagged two files for the word "procurement" appearing **in a
+   comment explaining that the component knows nothing about procurement**. Prose is not
+   behaviour, so the scanner strips comments first.
+
+Both failures were in the rule, not in the code. Which is exactly why the suite now carries a
+test asserting the rules still catch four real violations while permitting three legitimate
+lookups. A structural test whose rules have never been shown to bite is just a green tick.
+
+### Judgement calls
+
+- **React 19, not the React 18 named in section 3.** Nothing in this client uses an API that
+  differs between them; shipping a deliberately old major in a new project invites "why 18?"
+  and has no answer. Section 3 was updated rather than left divergent.
+- **The Vite dev server proxies `/api` to :3000.** The browser only ever sees one origin, so
+  CORS never enters the server - no middleware, no allow-list, no environment-dependent
+  behaviour to explain.
+- **`scripts/dev.mjs` instead of `concurrently`.** Thirty lines of `child_process` against a
+  dependency a reviewer would have to install to read one log. Two Windows/Node traps worth
+  knowing: Node 20+ refuses to spawn a `.cmd` without a shell (CVE-2024-27980), and passing an
+  args array with `shell: true` triggers DEP0190 - so the command goes through the shell as a
+  single constant string.
+- **React Query `retry: false`.** Every 4xx this API returns is a decision - a version conflict,
+  a refused transition. Retrying only delays telling the user by three round trips.
+- **The client sends `expectedVersion` on every mutation.** It has the version it rendered, so
+  it can say "I was looking at v2 when I decided this" - the stale-page half of ADR-015.
+  Verified end to end: it produced a real 409.
+
+### What is not verified
+
+The UI has not been clicked through in a browser. No browser automation is installed and none
+was added for this milestone. What *is* verified: it typechecks, it builds for production, the
+structural suite passes, and the complete lifecycle works through the proxy the browser uses.
+The DoD phrase "drivable from the UI" is therefore attested by the API path the UI drives, not
+by the UI itself - worth saying plainly rather than implying more.
 
 ## Recurring themes so far
 

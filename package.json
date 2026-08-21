@@ -11,7 +11,10 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @task-platform/api",
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm run dev --workspace @task-platform/api",
+    "dev:web": "npm run dev --workspace @task-platform/web",
+    "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:int": "npm run test:int --workspaces --if-present",
