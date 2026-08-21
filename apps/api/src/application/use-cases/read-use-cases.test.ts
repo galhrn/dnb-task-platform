@@ -136,13 +136,17 @@ describe('ListTaskTypesUseCase', () => {
   it('describes every registered type for the client, with no database at all', () => {
     const described = new ListTaskTypesUseCase(registry).execute();
 
-    expect(described.map((type) => type.type)).toEqual(['PROCUREMENT', 'DEVELOPMENT']);
-    expect(described[0]?.statuses).toHaveLength(3);
-    expect(described[1]?.statuses).toHaveLength(4);
-    expect(described[0]?.statuses[1]?.fields[0]).toMatchObject({
-      kind: 'string-array',
-      name: 'quotes',
-    });
+    // Whatever is registered is described - the shipped types are asserted by name in
+    // task-types.test.ts, which is where the catalogue belongs.
+    expect(described).toHaveLength(TASK_TYPE_DEFINITIONS.length);
+    expect(described.map((type) => type.type)).toEqual(
+      TASK_TYPE_DEFINITIONS.map((definition) => definition.type),
+    );
+
+    for (const type of described) {
+      expect(type.statuses.length).toBeGreaterThan(0);
+      expect(type.statuses[0]?.fields).toEqual([]);
+    }
   });
 
   it('grows by itself when a type is registered - no change to this use case', () => {

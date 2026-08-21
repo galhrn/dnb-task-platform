@@ -139,11 +139,13 @@ Content-Type: application/json
 
 { "toStatus": 2, "assignedUserId": "{{ada}}", "data": "quotes" }
 
-### 404 NOT_FOUND - a task type that is not registered.
+### 404 NOT_FOUND - a task type that is not registered. The value is deliberately
+# implausible: naming a type you intend to ship makes the example expire the day
+# it ships.
 POST {{host}}/tasks
 Content-Type: application/json
 
-{ "type": "MARKETING", "assignedUserId": "{{ada}}" }
+{ "type": "NO_SUCH_TASK_TYPE", "assignedUserId": "{{ada}}" }
 
 ### 404 NOT_FOUND - a user who does not exist.
 GET {{host}}/users/99999999-9999-4999-8999-999999999999/tasks

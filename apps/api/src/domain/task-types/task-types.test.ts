@@ -72,11 +72,19 @@ describe('Development', () => {
 });
 
 describe('the registration list', () => {
-  it('holds exactly the two types shipped so far - Marketing arrives at M7 (ADR-008)', () => {
-    expect(TASK_TYPE_DEFINITIONS.map((definition) => definition.type)).toEqual([
-      'PROCUREMENT',
-      'DEVELOPMENT',
-    ]);
+  it('registers every type documented above', () => {
+    const registered = TASK_TYPE_DEFINITIONS.map((definition) => definition.type);
+
+    expect(registered).toContain('PROCUREMENT');
+    expect(registered).toContain('DEVELOPMENT');
+    expect(new Set(registered).size).toBe(registered.length);
+  });
+
+  it('gives every registered type a creation status that requires nothing (WF-3a)', () => {
+    for (const definition of TASK_TYPE_DEFINITIONS) {
+      expect(definition.statuses.length).toBeGreaterThan(0);
+      expect(definition.statuses[0]?.fields).toEqual([]);
+    }
   });
 
   it('is well formed, so a misconfigured type would fail the process on boot', () => {

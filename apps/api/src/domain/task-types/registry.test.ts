@@ -17,10 +17,10 @@ describe('lookup', () => {
   });
 
   it('reports an unknown type as NOT_FOUND', () => {
-    expect(registry.has('MARKETING')).toBe(false);
+    expect(registry.has('NO_SUCH_TASK_TYPE')).toBe(false);
 
     try {
-      registry.get('MARKETING');
+      registry.get('NO_SUCH_TASK_TYPE');
       expect.unreachable('the lookup should have failed');
     } catch (error) {
       expect(error).toBeInstanceOf(TaskTypeNotFoundError);

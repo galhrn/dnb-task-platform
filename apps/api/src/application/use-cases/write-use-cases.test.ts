@@ -30,6 +30,9 @@ import { CreateTaskUseCase } from './create-task';
 const ALICE = 'user-alice';
 const BOB = 'user-bob';
 const QUOTES = { quotes: ['Supplier A - 100', 'Supplier B - 90'] };
+
+/** Deliberately not a plausible registry key, so it cannot become one. */
+const NEVER_REGISTERED = 'NO_SUCH_TASK_TYPE';
 const RECEIPT = { receipt: 'INV-2026-001' };
 
 const registry = new TaskTypeRegistry(TASK_TYPE_DEFINITIONS);
@@ -92,7 +95,7 @@ describe('CreateTaskUseCase', () => {
 
   it('rejects an unknown task type as NOT_FOUND, without touching the database', async () => {
     await expect(
-      create.execute({ type: 'MARKETING', assignedUserId: ALICE }),
+      create.execute({ type: NEVER_REGISTERED, assignedUserId: ALICE }),
     ).rejects.toBeInstanceOf(TaskTypeNotFoundError);
 
     expect(db.tasks.size).toBe(0);
