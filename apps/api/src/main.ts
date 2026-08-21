@@ -1,8 +1,8 @@
 import type { Server } from 'node:http';
 
 import { env } from './config/env';
+import { buildApp } from './composition-root';
 import { AppDataSource } from './infrastructure/db/data-source';
-import { createApp } from './interfaces/http/app';
 
 async function bootstrap(): Promise<void> {
   try {
@@ -16,7 +16,7 @@ async function bootstrap(): Promise<void> {
     console.warn(`[db]  ${describeError(error)}`);
   }
 
-  const app = createApp({ dataSource: AppDataSource });
+  const app = buildApp(AppDataSource);
   const server = app.listen(env.API_PORT, () => {
     console.log(`[api] listening on http://localhost:${env.API_PORT}/api/health (${env.NODE_ENV})`);
   });

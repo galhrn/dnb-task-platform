@@ -24,6 +24,7 @@
 | [M1 refinement](#m1-refinement--field-kind-dispatch) | `385e3b3` | Lookup-table dispatch, `boolean` and `date` |
 | [M2](#m2--infrastructure) | `6e8fd9e` | Entities, migration, repositories, the version guard |
 | [M3](#m3--application-layer) | `059859b` | Use cases, transaction boundaries, contract-checked fakes |
+| [M4](#m4--http--api-layer) | `ec1f7aa` | Routers, request schemas, error middleware, composition root |
 
 ---
 
@@ -370,6 +371,118 @@ assignee is a clean 404 instead of a foreign-key violation surfacing as a 500. T
 pinning that precedence.
 
 ---
+
+---
+
+## M4 - HTTP / API layer
+
+**Commit:** `ec1f7aa` (`feat/m4-http`) - **Definition of done:** Supertest integration suite
+covering every error code in section 9.
+
+### Result
+
+```
+npm test           132 passed   unit, no container
+npm run test:int    49 passed   22 repository + 27 API, real Postgres
+npm run typecheck   clean
+```
+
+Plus a live curl lifecycle against the booted server - because the test harness builds the app
+itself, and that path never proves `main.ts` and the composition root actually work.
+
+### The composition root
+
+Every concrete choice in the system is made in one file, in dependency order, readable top to
+bottom. This is **ADR-001** made visible: NestJS would assemble the same graph with less code,
+but it would assemble it somewhere you cannot point at, and this wiring is exactly what the
+assignment is evaluating. No decorators, no container, no reflection, no registration order to
+reason about.
+
+The asymmetry from M3 is visible right there in the constructor calls: writes take the
+`UnitOfWork`, reads take repositories directly, and `listTaskTypes` takes only the registry
+because task types live in code and never touch the database.
+
+`app.ts` declares the `UseCases` interface it needs; the composition root satisfies it. The
+dependency points the right way - the HTTP layer states its requirements, and the root serves
+them.
+
+### The 400 / 409 / 422 line
+
+The decision that took the most thought. A request schema is asked one question only: **can a
+use case accept this?** Whether the request is *allowed* is the engine's call.
+
+| Request | Status | Why |
+|---|---|---|
+| `toStatus: "two"` | 400 | not a number - unparseable |
+| `toStatus: 2.5` | 409 | a number, but not a status (WF-3) |
+| `toStatus: 99` | 409 | a status, but out of range for this type |
+| `data: "quotes"` | 400 | not an object - wrong shape |
+| `data: {}` | 422 | an object, but not the one this status requires |
+
+The temptation is to validate `toStatus` as `z.number().int().min(1)` at the boundary and be
+done. That would be wrong twice over: the range depends on the task type, so the schema would
+need to know about task types; and WF-3's "statuses are integers" rule would stop being
+reachable, leaving a tested domain rule that production can never trigger.
+
+`data` stays opaque at the boundary for the same reason. Putting a type's field rules in the
+request schema is a second source of truth that needs editing every time a type is added -
+precisely what this architecture exists to avoid. It is validated one layer down, against a
+schema compiled from the descriptors (ADR-009).
+
+### Error handling
+
+One `Record<ErrorCode, number>` is the only place in the codebase that knows what an HTTP
+status is. Typed as a total map, so adding an `ErrorCode` without deciding its status is a
+compile error rather than an accidental 500 - the same trick as the field-kind dispatch table
+(ADR-014).
+
+Three codes share 409 - `INVALID_TRANSITION`, `TASK_CLOSED`, `VERSION_CONFLICT`. The status
+says "legal request, wrong state"; the `code` in the envelope is what tells a client which.
+
+Details worth keeping:
+
+- **Malformed JSON** is caught explicitly. body-parser throws a `SyntaxError` with
+  `type: 'entity.parse.failed'` *before* any route runs, so without handling it a JSON API
+  answers a broken request with Express's HTML error page. There is a test for it.
+- **Unmatched routes** become a `RouteNotFoundError`, so a 404 leaves through the same envelope
+  as everything else rather than through Express's default.
+- **Unhandled errors** return an id and nothing else. An internal message leaked into a response
+  is how stack traces end up in screenshots. The test asserts the response does *not* contain
+  the thrown message and *does* contain the `X-Request-Id`.
+- **`asyncRoute`** exists because Express 4 does not catch a rejected promise - it hangs the
+  request instead. It is the one thing that would be deleted on an upgrade to Express 5.
+
+`BadRequestError` and `RouteNotFoundError` live in `interfaces/http/errors.ts`, not in the
+domain: a malformed request is not a domain concept, and the domain never sees one. They still
+extend `DomainError` so the middleware has exactly one shape to understand.
+
+### Strictness
+
+Bodies, params and query strings are all `.strict()`. An unrecognised key, or `?state=ARCHIVED`,
+is a 400 rather than silently dropped - the same stance as ADR-012 and the status schemas. A
+stale client should be told, not quietly tolerated.
+
+`:id` params are validated as UUIDs at the boundary. That is not pedantry: without it, a request
+for `/api/tasks/not-a-uuid` reaches Postgres, which refuses the cast, and a client's typo
+becomes a 500.
+
+### Why the API suite is end-to-end
+
+It would have been cheap to run these tests against the in-memory fakes and keep them in
+`npm test`. They run against real Postgres instead, because the failures worth catching at this
+layer are the ones a double cannot produce: a uuid the database refuses to cast, a JSONB round
+trip, the version guard inside a real transaction.
+
+The trade-off is honest - HTTP coverage now needs a container. The one path that does *not* need
+one is the middleware's own 500 handling, which is tested with a throwaway Express app and a
+route that throws.
+
+### Housekeeping
+
+Two overdue README placeholders were filled while here: `TODO(M4)` (worked request/response
+examples per endpoint, taken from real output) and `TODO(M1)` (the Procurement definition as the
+README's centrepiece). The snippet was diffed against the source file - identical key for key,
+differing only in trailing commas from reflowing to fit the page.
 
 ## Recurring themes so far
 

@@ -156,10 +156,16 @@ dnb-task-platform/
 │     │  ├─ db/migrate.ts                `migration:run` / `--revert`, no CLI wiring
 │     │  └─ db/seeds/seed-users.ts       fixed ids, idempotent
 │     ├─ interfaces/http/
-│     │  ├─ app.ts                       express app factory; receives its dependencies
-│     │  ├─ routes/                      health.routes.ts, tasks.routes.ts, users.routes.ts, task-types.routes.ts
-│     │  ├─ middleware/error-handler.ts  domain error → HTTP envelope
-│     │  └─ dto/                         Zod request parsers
+│     │  ├─ app.ts                       express factory; declares the UseCases it needs
+│     │  ├─ errors.ts                    BadRequestError, RouteNotFoundError (boundary only)
+│     │  ├─ routes/                      health, tasks, users, task-types
+│     │  ├─ middleware/
+│     │  │  ├─ error-handler.ts          ErrorCode → HTTP status, the only such map
+│     │  │  ├─ request-id.ts             X-Request-Id, quoted in every 500
+│     │  │  └─ async-route.ts            Express 4 does not catch rejected promises
+│     │  └─ dto/
+│     │     ├─ request-schemas.ts        Zod parsers — shape only, never policy
+│     │     └─ response-mappers.ts       application results → contracts DTOs
 │     ├─ config/env.ts                   process.env parsed once through a Zod schema
 │     ├─ composition-root.ts             all wiring, explicit
 │     └─ main.ts                         bootstrap only
@@ -370,7 +376,7 @@ completion summary is appended to `milestone_logs.md` before the next one starts
 - [x] **M1 — Domain core.** `TaskTypeDefinition`, registry, descriptor→Zod compiler, workflow engine, domain errors. Procurement + Development definitions. *DoD: unit tests cover WF-1..WF-7 and derived rules; zero framework imports in `domain/`.* — **done 2026-08-21**, 91 tests green.
 - [x] **M2 — Persistence.** Entities, InitialSchema migration, repository implementations, user seed. *DoD: migration runs clean on an empty DB; seeds insert demo users.* — **done 2026-08-21**; down-then-up verified, 14 integration tests green.
 - [x] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.* — **done 2026-08-21**; **seven** use cases (see §16), 132 unit + 22 integration tests green.
-- [ ] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.*
+- [x] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.* — **done 2026-08-21**; 27 API tests, all seven codes covered, plus a live curl lifecycle against the booted server.
 - [ ] **M5 — Client.** API client, hooks, `DynamicFieldForm`, task list, status controls. *DoD: full lifecycle drivable from the UI; no per-type conditionals in any component.*
 - [ ] **M6 — Docs & polish.** README complete, `.env.example`, seed script, request collection. *DoD: clean clone → running app following README only.*
 - [ ] **M7 — Marketing type.** Isolated commit. *DoD: diff touches exactly two server files and nothing else.*
@@ -421,6 +427,11 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
 | 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
 | 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | **M4 executed** on `feat/m4-http`. Routers, Zod request schemas, error middleware, composition root, 27 Supertest tests. | HTTP milestone. |
+| 2026-08-21 | *Local choice:* the 400/409/422 boundary is drawn at **parseability**, not legality. `toStatus: "two"` is 400; `toStatus: 2.5` and `toStatus: 99` are 409; `data: "x"` is 400 but `data: {}` is 422. | Putting a type's field rules in the request schema would be a second source of truth needing an edit per task type — the exact thing this architecture exists to avoid. The DTO asks "can a use case accept this?"; everything else is the engine's call. |
+| 2026-08-21 | *Local choice:* `BadRequestError` and `RouteNotFoundError` live in `interfaces/http/errors.ts`, not in the domain, but extend `DomainError`. | A malformed request is not a domain concept — the domain never sees one. Extending the coded-error base keeps the middleware with exactly one shape to understand. |
+| 2026-08-21 | *Local choice:* request bodies, params and query strings are all `.strict()`; an unrecognised key or `?state=` value is a 400. | Same stance as ADR-012 and the status schemas: no silent ignoring. A stale client should be told, not quietly tolerated. |
+| 2026-08-21 | *Local choice:* the API suite is end-to-end against Postgres rather than fake-backed. | The failures worth catching here are the ones a double cannot produce — a uuid Postgres refuses to cast, a JSONB round trip, the version guard inside a real transaction. The trade-off is that HTTP coverage needs a container; the middleware's own 500 path is tested separately with a throwaway app and no database. |
 | 2026-08-21 | *Workflow change:* `milestone_logs.md` added; §0 gains a Log rule. M0–M3 summaries transcribed retroactively. | The completion summaries carried reasoning that §11 deliberately compresses away — rejected alternatives, findings, and the arguments behind them. They are the raw material for a teaching write-up, and they were only living in a chat transcript. |
 | 2026-08-21 | **M3 executed** on `feat/m3-application`. Seven use cases, in-memory fakes, a shared repository contract suite, 27 new tests. | Application milestone. |
 | 2026-08-21 | *Doc correction:* §5 and §13 said "five use cases", but §9's endpoint table also has `GET /tasks/:id` and `GET /users`, which had none. `get-task.ts` and `list-users.ts` added. | §5 predated the §9 contract. Routes never reach past the application layer, so every endpoint needs one — even a two-line read. |

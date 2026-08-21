@@ -28,7 +28,35 @@ Open <http://localhost:5173>.
 
 The assignment asks how a third task type would be added without touching existing code. Here is the whole answer:
 
-> _TODO(M1): paste the real `TaskTypeDefinition` for Procurement here — it should be short enough to read in fifteen seconds._
+```ts
+// apps/api/src/domain/task-types/procurement.task-type.ts - the whole file,
+// reflowed to fit this page
+export const procurementTaskType: TaskTypeDefinition = {
+  type: 'PROCUREMENT',
+  label: 'Procurement',
+  statuses: [
+    { name: 'Created', fields: [] },
+    {
+      name: 'Supplier offers received',
+      fields: [
+        { kind: 'string-array', name: 'quotes', label: 'Supplier quotes',
+          required: true, minItems: 2, maxItems: 2, itemMinLength: 1 },
+      ],
+    },
+    {
+      name: 'Purchase completed',
+      fields: [
+        { kind: 'string', name: 'receipt', label: 'Receipt', required: true, minLength: 1 },
+      ],
+    },
+  ],
+};
+```
+
+That is the entire type-specific half of the system. Note what is *absent*: no final-status
+constant (it is `statuses.length`), no transition table (forward is `+1`, backward is
+anything lower), no validation code (the descriptors compile to it), and no mention of
+this type anywhere in the engine, the use cases, the routes, or the client.
 
 To add a type:
 
@@ -164,7 +192,82 @@ Base path `/api`.
 | `GET` | `/users/:id/tasks` | Tasks assigned to a user |
 | `GET` | `/users` | Seeded demo users |
 
-> _TODO(M4): add one worked request/response example per endpoint. Keep them copy-pasteable._
+### Worked examples
+
+Every response below is real output from the running service.
+
+```bash
+# The metadata that drives the client's forms. Adding a task type changes this
+# payload and nothing else.
+curl localhost:3000/api/task-types
+
+# Create. 201 with the task.
+curl -X POST localhost:3000/api/tasks -H 'Content-Type: application/json' \
+  -d '{"type":"PROCUREMENT","assignedUserId":"11111111-1111-4111-8111-111111111111"}'
+```
+```json
+{"id":"b9810de1-...","type":"PROCUREMENT","status":1,"state":"OPEN",
+ "assignedUserId":"11111111-...","data":{},"version":1,
+ "createdAt":"2026-08-21T10:03:06.114Z","updatedAt":"2026-08-21T10:03:06.114Z"}
+```
+
+```bash
+# Move forward. Direction is derived from toStatus, never declared.
+curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: application/json' \
+  -d '{"toStatus":2,"assignedUserId":"11111111-...","data":{"quotes":["A-100","B-90"]}}'
+```
+```json
+{"id":"b9810de1-...","status":2,"state":"OPEN","data":{"2":{"quotes":["A-100","B-90"]}},
+ "version":2,"updatedAt":"2026-08-21T10:03:06.338Z"}
+```
+
+```bash
+# Out of range -> 409, and the message is derived from the type's own ladder.
+curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: application/json' \
+  -d '{"toStatus":9,"assignedUserId":"11111111-..."}'
+```
+```json
+{"error":{"code":"INVALID_TRANSITION","message":"Status 9 is out of range for PROCUREMENT (1..3)"}}
+```
+
+```bash
+# Entering a status without the data it requires -> 422, with the field named.
+curl -X POST localhost:3000/api/tasks/$ID/transitions -H 'Content-Type: application/json' \
+  -d '{"toStatus":3,"assignedUserId":"11111111-..."}'
+```
+```json
+{"error":{"code":"VALIDATION_FAILED",
+  "message":"Status 3 of PROCUREMENT was not entered with the data it requires",
+  "details":[{"path":"data.receipt","message":"Required"}]}}
+```
+
+```bash
+# Close: only at the final status, and it names no new assignee (ADR-011).
+curl -X POST localhost:3000/api/tasks/$ID/close
+
+# A user's tasks - open and closed by default (ADR-012).
+curl "localhost:3000/api/users/11111111-.../tasks?state=OPEN"
+
+# The seeded users, for the assignee picker.
+curl localhost:3000/api/users
+```
+
+### 400 or 422? The line this API draws
+
+The request schema asks one question: **can a use case accept this?** Whether the request is
+*allowed* is the workflow engine's call, and the two produce different statuses.
+
+| Request | Status | Why |
+|---|---|---|
+| `toStatus: "two"` | `400` | not a number — unparseable |
+| `toStatus: 2.5` | `409` | a number, but not a status (WF-3) |
+| `toStatus: 99` | `409` | a status, but out of range for this type |
+| `data: "quotes"` | `400` | not an object — wrong shape |
+| `data: {}` | `422` | an object, but not the one this status requires |
+
+Putting a task type's field rules into the request schema would create a second source of
+truth that needs editing every time a type is added — the exact thing this architecture
+exists to avoid.
 
 ### Errors
 
