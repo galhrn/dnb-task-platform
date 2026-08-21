@@ -7,6 +7,7 @@ import { AppDataSource } from '../data-source';
 import { TaskEntity } from '../entities/task.entity';
 import { TaskTransitionEntity } from '../entities/task-transition.entity';
 import { UserEntity } from '../entities/user.entity';
+import { runTaskRepositoryContract } from '../../../application/testing/task-repository.contract';
 import { TypeOrmTaskRepository } from './typeorm-task.repository';
 import { TypeOrmUnitOfWork } from './typeorm-unit-of-work';
 
@@ -328,4 +329,23 @@ describe('findByAssignee (ADR-012)', () => {
 
     expect(await repository().findByAssignee(BOB)).toHaveLength(0);
   });
+});
+
+/**
+ * The same suite the in-memory doubles are held to, run against Postgres. Fakes that pass
+ * a contract the real implementation also passes are safe to unit-test against.
+ */
+runTaskRepositoryContract('TypeOrmTaskRepository', {
+  alice: ALICE,
+  bob: BOB,
+  setup: async () => {
+    await AppDataSource.query('TRUNCATE TABLE "tasks" CASCADE');
+
+    return {
+      repository: new TypeOrmTaskRepository(AppDataSource.manager),
+      remove: async (taskId: string) => {
+        await AppDataSource.getRepository(TaskEntity).delete({ id: taskId });
+      },
+    };
+  },
 });

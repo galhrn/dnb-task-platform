@@ -128,12 +128,18 @@ dnb-task-platform/
 │     ├─ application/
 │     │  ├─ ports/                       TaskRepository, UserRepository, UnitOfWork
 │     │  │                                (no barrel — §15; imported file by file)
-│     │  └─ use-cases/
-│     │     ├─ create-task.ts
-│     │     ├─ change-task-status.ts
-│     │     ├─ close-task.ts
-│     │     ├─ get-user-tasks.ts
-│     │     └─ list-task-types.ts
+│     │  ├─ use-cases/
+│     │  │  ├─ create-task.ts               ┐
+│     │  │  ├─ change-task-status.ts        ├ transactional (UnitOfWork)
+│     │  │  ├─ close-task.ts                ┘
+│     │  │  ├─ get-task.ts                  ┐
+│     │  │  ├─ get-user-tasks.ts            ├ reads — ports injected directly
+│     │  │  ├─ list-users.ts                │
+│     │  │  ├─ list-task-types.ts           ┘ (no database at all)
+│     │  │  └─ expected-version.ts          the stale-page half of ADR-015
+│     │  └─ testing/
+│     │     ├─ in-memory-repositories.ts    fakes with real rollback semantics
+│     │     └─ task-repository.contract.ts  one suite, run against both implementations
 │     ├─ infrastructure/
 │     │  ├─ db/data-source.ts            entities + migrations registered explicitly
 │     │  ├─ db/entities/                 TaskEntity, TaskTransitionEntity, UserEntity
@@ -354,7 +360,7 @@ Each milestone has a definition of done. This file is updated at the end of each
 - [x] **M0 — Scaffold.** Workspaces, TS strict configs, Express boot, docker-compose, DataSource, health route. *DoD: `npm run dev` serves `/api/health`; `docker compose up -d` gives a reachable Postgres.* — **done 2026-08-21**
 - [x] **M1 — Domain core.** `TaskTypeDefinition`, registry, descriptor→Zod compiler, workflow engine, domain errors. Procurement + Development definitions. *DoD: unit tests cover WF-1..WF-7 and derived rules; zero framework imports in `domain/`.* — **done 2026-08-21**, 91 tests green.
 - [x] **M2 — Persistence.** Entities, InitialSchema migration, repository implementations, user seed. *DoD: migration runs clean on an empty DB; seeds insert demo users.* — **done 2026-08-21**; down-then-up verified, 14 integration tests green.
-- [ ] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.*
+- [x] **M3 — Application layer.** Five use cases, transaction boundaries, optimistic locking. *DoD: use-case tests against in-memory repository doubles.* — **done 2026-08-21**; **seven** use cases (see §16), 132 unit + 22 integration tests green.
 - [ ] **M4 — HTTP layer.** Routes, request DTOs, error middleware, `GET /task-types`. *DoD: Supertest integration suite covering every error code in §9.*
 - [ ] **M5 — Client.** API client, hooks, `DynamicFieldForm`, task list, status controls. *DoD: full lifecycle drivable from the UI; no per-type conditionals in any component.*
 - [ ] **M6 — Docs & polish.** README complete, `.env.example`, seed script, request collection. *DoD: clean clone → running app following README only.*
@@ -370,6 +376,7 @@ Each milestone has a definition of done. This file is updated at the end of each
 | `application/` | Unit with repository doubles | Vitest | Orchestration, transaction intent, version conflict handling |
 | `infrastructure/` | Integration | Vitest + dockerised PG (`npm run test:int`) | The version guard, transactional rollback, JSONB round-trip — the things a repository double would only agree with |
 | `interfaces/http` | Integration | Vitest + Supertest + dockerised PG | Status codes and error envelope for every code in §9 |
+| `application/` → ports | Contract | `application/testing/task-repository.contract.ts`, run in **both** suites | The in-memory doubles and the TypeORM repository behave identically on everything a use case relies on — so the fast tests are trustworthy |
 | Extensibility | Structural | `domain/extensibility.test.ts` — registers a 5-status throwaway type at runtime | Adding a type requires no engine change — the claim, asserted |
 | Purity | Structural | `domain/purity.test.ts` — reads every import in `domain/` | The layer is framework-free, and stays that way after the next contributor |
 
@@ -405,6 +412,12 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
 | 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
 | 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | **M3 executed** on `feat/m3-application`. Seven use cases, in-memory fakes, a shared repository contract suite, 27 new tests. | Application milestone. |
+| 2026-08-21 | *Doc correction:* §5 and §13 said "five use cases", but §9's endpoint table also has `GET /tasks/:id` and `GET /users`, which had none. `get-task.ts` and `list-users.ts` added. | §5 predated the §9 contract. Routes never reach past the application layer, so every endpoint needs one — even a two-line read. |
+| 2026-08-21 | *Local choice:* fakes are held to the **same contract suite** as the TypeORM repository — one file, run in both the unit and integration runs. | The standard objection to fakes is that they drift and quietly agree with whatever the code does. Running one suite against both makes drift a red build. It found a leak in its own harness immediately: "the row vanished" cannot be simulated by re-running setup, so the fixture exposes an explicit `remove()`. |
+| 2026-08-21 | *Local choice:* in `change-task-status`, the engine runs **before** the assignee existence check. | The engine is pure and free, so an illegal move is refused without a second query, and "you cannot skip a status" beats "that user does not exist" when both are true. The `exists()` check remains, so a bad assignee is a clean 404 rather than a foreign-key 500. |
+| 2026-08-21 | *Local choice:* only the three write use cases take a `UnitOfWork`; reads take the ports directly, and `list-task-types` takes only the registry. | A transaction around a single read buys nothing, and the asymmetry documents where atomicity actually matters. `list-task-types` touching no port at all is the clearest statement that task types live in code. |
+| 2026-08-21 | *Local choice:* `InMemoryUnitOfWork` snapshots and restores on failure, giving genuine rollback semantics. | Without it a use-case test cannot distinguish "committed" from "threw after writing" — which is the entire point of a transaction boundary. |
 | 2026-08-21 | **M2 executed** on `feat/m2-persistence`. Entities, `InitialSchema`, repositories, `TypeOrmUnitOfWork`, `migrate.ts`, user seed, 14 integration tests. | Persistence milestone. |
 | 2026-08-21 | *Finding:* TypeORM's `save()` does **not** enforce `@VersionColumn` — a stale write succeeded, and saving a deleted row re-inserted it. ADR-016 recorded; write path is now a guarded `UPDATE ... RETURNING *`. | The integration test was written expecting the ORM to do this and failed. Worth keeping in mind: a mocked repository would have agreed with the wrong assumption forever. |
 | 2026-08-21 | *Local choice:* `migration:run` / `seed` are small scripts over the DataSource API rather than the TypeORM CLI. | The CLI needs a TypeScript loader pinned onto a path inside `node_modules`, which breaks differently on each OS — a poor thing to hand a reviewer. `migration:generate` is not needed; migrations are hand-written (§10). |
