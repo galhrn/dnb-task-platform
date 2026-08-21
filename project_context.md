@@ -11,7 +11,14 @@
 - **Conflict rule:** if code and this file disagree, one of them is fixed in the *same* change. Never left divergent.
 - **Decision rule:** decisions are append-only in §11. Superseding an ADR requires a *new* ADR that references the old one; the old entry is marked `SUPERSEDED BY ADR-xxx`, never deleted.
 - **Question rule:** anything that would become a new ADR goes to §12 and waits for input. Reversible, local choices are implemented and noted in §16.
+- **Log rule:** at the very end of every milestone — after the code is committed and this file
+  is updated, and **before** asking for the green light to start the next one — append the
+  milestone completion summary to `milestone_logs.md`. That file is the narrative record:
+  what was built, the judgement calls, the rejected alternatives, and anything that turned out
+  to be wrong. Preserve the reasoning rather than compressing it; §11 already holds the terse
+  version. A milestone is not finished until its entry exists.
 - **Size rule:** keep under ~400 lines. Section order is stable so diffs stay readable.
+  `milestone_logs.md` has no size limit — it grows by append and is never rewritten.
 
 ---
 
@@ -99,7 +106,8 @@ dnb-task-platform/
 ├─ package.json                     npm workspaces root, orchestration scripts
 ├─ tsconfig.base.json               strict compiler options; every workspace extends it
 ├─ .env.example                     one variable set, read by compose *and* the api
-├─ project_context.md               this file
+├─ project_context.md               this file — decisions in their final form
+├─ milestone_logs.md                narrative record, appended at each milestone (§0)
 ├─ README.md                        reviewer-facing deliverable
 │
 ├─ packages/contracts/              shared, dependency-free types (source-only, no build step)
@@ -355,7 +363,8 @@ The CHECKs encode *structure* — `state` and `kind` are closed sets belonging t
 
 ## 13. Work plan
 
-Each milestone has a definition of done. This file is updated at the end of each.
+Each milestone has a definition of done. This file is updated at the end of each, and the
+completion summary is appended to `milestone_logs.md` before the next one starts (§0).
 
 - [x] **M0 — Scaffold.** Workspaces, TS strict configs, Express boot, docker-compose, DataSource, health route. *DoD: `npm run dev` serves `/api/health`; `docker compose up -d` gives a reachable Postgres.* — **done 2026-08-21**
 - [x] **M1 — Domain core.** `TaskTypeDefinition`, registry, descriptor→Zod compiler, workflow engine, domain errors. Procurement + Development definitions. *DoD: unit tests cover WF-1..WF-7 and derived rules; zero framework imports in `domain/`.* — **done 2026-08-21**, 91 tests green.
@@ -412,6 +421,7 @@ Not chasing a coverage number. Chasing: every row in §6 and every row in the §
 | 2026-08-21 | *Local choice:* status schemas are `.strict()` — a key the type never declared is `VALIDATION_FAILED`. | An undeclared key is a typo or a stale client; silently storing it in the JSONB projection is the quiet kind of bug. Consistent with ADR-012's "no silent ignoring". |
 | 2026-08-21 | *Local choice:* required strings are non-empty and trimmed by default; a descriptor need not spell out `minLength: 1`. | "A value is required" and "an empty string will do" are never both true here. Trimming normalises what reaches the JSONB column. |
 | 2026-08-21 | *Local choice:* a malformed `TaskTypeDefinition` throws `TaskTypeConfigurationError` — a plain `Error`, at registry construction. | It is a programming mistake, not a request outcome. Carrying no `ErrorCode` makes it structurally impossible to return to a client, and boot-time failure beats a 500 on the first request. |
+| 2026-08-21 | *Workflow change:* `milestone_logs.md` added; §0 gains a Log rule. M0–M3 summaries transcribed retroactively. | The completion summaries carried reasoning that §11 deliberately compresses away — rejected alternatives, findings, and the arguments behind them. They are the raw material for a teaching write-up, and they were only living in a chat transcript. |
 | 2026-08-21 | **M3 executed** on `feat/m3-application`. Seven use cases, in-memory fakes, a shared repository contract suite, 27 new tests. | Application milestone. |
 | 2026-08-21 | *Doc correction:* §5 and §13 said "five use cases", but §9's endpoint table also has `GET /tasks/:id` and `GET /users`, which had none. `get-task.ts` and `list-users.ts` added. | §5 predated the §9 contract. Routes never reach past the application layer, so every endpoint needs one — even a two-line read. |
 | 2026-08-21 | *Local choice:* fakes are held to the **same contract suite** as the TypeORM repository — one file, run in both the unit and integration runs. | The standard objection to fakes is that they drift and quietly agree with whatever the code does. Running one suite against both makes drift a red build. It found a leak in its own harness immediately: "the row vanished" cannot be simulated by re-running setup, so the fixture exposes an explicit `remove()`. |
