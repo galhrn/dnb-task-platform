@@ -27,6 +27,7 @@
 | [M4](#m4--http--api-layer) | `84634d1` | Routers, request schemas, error middleware, composition root |
 | [M5](#m5--client-react-layer) | `9ad9383` | Vite + React Query, dynamic forms, structural proof |
 | [M6](#m6--docs--polish) | `3bdd880` | README, request collection, dead-code prune, clean-clone check |
+| [M7](#m7--marketing-the-extensibility-proof) | `a863f67` | The two-file commit |
 
 ---
 
@@ -662,6 +663,81 @@ reads better for it.
 `DynamicFieldForm` was passing an `error` prop into every renderer that none of them read - the
 label owns the message. Removed. `noUnusedParameters` does not catch that, because a destructured
 property of an interface is not an unused parameter; it took reading the file.
+
+---
+
+## M7 - Marketing, the extensibility proof
+
+**Commit:** `a863f67` (`feat/m7-marketing`) - **Definition of done:** the diff touches
+exactly two server files and nothing else.
+
+### The diff
+
+```
+apps/api/src/domain/task-types/index.ts            |  4 ++-
+apps/api/src/domain/task-types/marketing.task-type.ts | 32 ++++++++++++++++++++++
+2 files changed, 35 insertions(+), 1 deletion(-)
+```
+
+Not touched: the workflow engine, the registry, the descriptor compiler, any use case, any
+route, the composition root, the database, any migration, and every file under `apps/web`.
+
+### It works because nothing had to be told about it
+
+```
+GET /task-types
+  PROCUREMENT  3 statuses  entry fields: ['quotes', 'receipt']
+  DEVELOPMENT  4 statuses  entry fields: ['specification', 'branchName', 'version']
+  MARKETING    2 statuses  entry fields: ['campaignUrl']
+
+POST /tasks/:id/close      at status 1
+  -> MARKETING can only be closed at status 2, but the task is at 1
+
+POST /tasks/:id/transitions  toStatus 2, no data
+  -> VALIDATION_FAILED  [{ path: 'data.campaignUrl', message: 'Required' }]
+
+POST /tasks/:id/transitions  toStatus 2, campaignUrl supplied
+  -> status 2 OPEN  data { "2": { "campaignUrl": "https://example.com/spring" } }
+```
+
+Both error messages come from code that has never heard of marketing. "Status 2" is
+`statuses.length`; `campaignUrl` is a descriptor compiled into a Zod schema at first use.
+
+**226 tests passed unedited.** `purity.test.ts` went from 11 to 12 on its own, because it
+enumerates the domain directory rather than a list someone maintains - the new file was
+covered the moment it existed.
+
+### The part that nearly did not hold
+
+The first attempt at this commit broke **five assertions**, which means the two-file claim was
+not true as the repository stood. Worth recording honestly, because the failure was more
+interesting than the success.
+
+Two categories, both wrong independently of Marketing:
+
+1. **Landmine fixtures.** Three tests and one request example used `'MARKETING'` as the value
+   for "a task type that is not registered". A fixture for *never registered* must not be the
+   name of a type you intend to ship - it expires the day it does. They now use
+   `NO_SUCH_TASK_TYPE`, which cannot become a registry key.
+2. **Over-specification.** A use-case test and the `GET /task-types` integration test both
+   pinned the exact catalogue with `toEqual(['PROCUREMENT', 'DEVELOPMENT'])`. Those suites are
+   about the use case and the endpoint; their job is that *whatever is registered* gets
+   described in a shape the client can render. Which types exist is the catalogue's business.
+
+The catalogue test kept its assertion, at the right strength: its intent is "the documented
+types are registered", not "no other type may exist". `toContain`, plus a duplicate check, plus
+a new test asserting every registered type - present or future - has a creation status that
+requires nothing (WF-3a).
+
+That went in as its **own commit, before the one it enables**. A diff is only evidence if the
+tests it passes were not adjusted to let it through, so the adjusting had to be visible on its
+own terms rather than folded in. A reviewer can read that commit, judge whether each change
+stands up without Marketing in the picture, and only then look at the proof.
+
+The general lesson is sharper than the milestone: **a claim about how little a change costs is
+also a claim about what your tests are coupled to.** Assertions that pin a registry's contents
+in suites that are not about the registry will quietly tax every future addition, and you only
+find out on the day you make one.
 
 ## Recurring themes so far
 

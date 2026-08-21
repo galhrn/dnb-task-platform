@@ -26,7 +26,7 @@ Then open <http://localhost:5173>. `npm run dev` runs the API on :3000 and the c
 Useful afterwards:
 
 ```bash
-npm test          # 175 unit tests, no container needed
+npm test          # 177 unit tests, no container needed
 npm run test:int  #  49 integration tests, needs the database
 npm run db:reset  # drop the volume and start clean
 ```
@@ -423,13 +423,13 @@ npm run test:int      # integration — requires docker compose up
 
 The domain suite covers each of the seven workflow rules by name. The integration suite covers each error code above. One structural test registers a throwaway task type at runtime, asserting that extensibility is a property of the code rather than a claim in this file.
 
-**224 tests.** 175 run without a database, in about a second.
+**226 tests.** 177 run without a database, in about a second.
 
 | Suite | Tests | What it proves |
 |---|---|---|
 | `domain/workflow/workflow-engine.test.ts` | 38 | WF-1..WF-7 and every derived rule, by name |
-| `domain/task-types/*` | 41 | the descriptor vocabulary, the registry, and that the catalogue matches this page |
-| `domain/purity.test.ts` | 11 | `domain/` imports no framework |
+| `domain/task-types/*` | 42 | the descriptor vocabulary, the registry, and that the catalogue matches this page |
+| `domain/purity.test.ts` | 12 | `domain/` imports no framework |
 | `domain/extensibility.test.ts` | 7 | a five-status type registered at runtime runs its whole lifecycle |
 | `application/use-cases/*` | 27 | orchestration, transaction boundaries, which error wins when two things are wrong |
 | `application/testing/*` | 8 | the in-memory doubles satisfy the repository contract |
