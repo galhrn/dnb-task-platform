@@ -1,4 +1,5 @@
 import { developmentTaskType } from './development.task-type';
+import { marketingTaskType } from './marketing.task-type';
 import { procurementTaskType } from './procurement.task-type';
 import type { TaskTypeDefinition } from './task-type-definition';
 
@@ -11,9 +12,10 @@ import type { TaskTypeDefinition } from './task-type-definition';
 export const TASK_TYPE_DEFINITIONS: readonly TaskTypeDefinition[] = [
   procurementTaskType,
   developmentTaskType,
+  marketingTaskType,
 ];
 
-export { developmentTaskType, procurementTaskType };
+export { developmentTaskType, marketingTaskType, procurementTaskType };
 export * from './field-schema';
 export * from './registry';
 export * from './task-type-definition';
