@@ -26,7 +26,7 @@
 | [M3](#m3--application-layer) | `059859b` | Use cases, transaction boundaries, contract-checked fakes |
 | [M4](#m4--http--api-layer) | `84634d1` | Routers, request schemas, error middleware, composition root |
 | [M5](#m5--client-react-layer) | `9ad9383` | Vite + React Query, dynamic forms, structural proof |
-| [M6](#m6--docs--polish) | `PENDING` | README, request collection, dead-code prune, clean-clone check |
+| [M6](#m6--docs--polish) | `3bdd880` | README, request collection, dead-code prune, clean-clone check |
 
 ---
 
@@ -584,7 +584,7 @@ by the UI itself - worth saying plainly rather than implying more.
 
 ## M6 - Docs & polish
 
-**Commit:** `PENDING` (`feat/m6-docs`) - **Definition of done:** clean clone → running app
+**Commit:** `3bdd880` (`feat/m6-docs`) - **Definition of done:** clean clone → running app
 following the README only.
 
 ### The definition of done, actually performed
