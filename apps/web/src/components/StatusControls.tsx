@@ -23,12 +23,17 @@ export interface StatusControlsProps {
  *   close permitted  = current === statuses.length    (WF-6)
  *
  * There is no table of what each type allows, because the ladder's length is the only
- * thing that differs between types. A two-status Marketing task will render one advance
- * button and a close button without this file being touched.
+ * thing that differs between types. A two-status task renders one forward action and a
+ * close without this file being touched.
  *
- * The rules are still enforced server-side - hiding a button is a convenience, never the
- * enforcement. Reversing past a status the server would refuse is impossible here, but if
- * it were attempted the 409 would still come back and be shown.
+ * The LAYOUT follows the decision a person is making rather than the three endpoints
+ * behind it. One card: who takes it next, then the single action that moves the task on -
+ * forwards mid-ladder, closing at the end - and below a divider, the way back. The
+ * assignee sits inside the card because it is part of the same submission as whichever
+ * button is pressed; detached, it reads as unrelated configuration.
+ *
+ * Hiding a button is a convenience, never the enforcement. The rules are enforced
+ * server-side, and a refused move still returns its 409 and is shown.
  */
 export function StatusControls({
   task,
@@ -38,11 +43,13 @@ export function StatusControls({
 }: StatusControlsProps): JSX.Element {
   const finalStatus = descriptor.statuses.length;
   const nextStatus = task.status + 1;
+  const nextStatusName = descriptor.statuses[nextStatus - 1]?.name;
   const nextFields = descriptor.statuses[nextStatus - 1]?.fields ?? [];
 
-  const canAdvance = task.state === 'OPEN' && task.status < finalStatus;
-  const canReverse = task.state === 'OPEN' && task.status > 1;
-  const canClose = task.state === 'OPEN' && task.status === finalStatus;
+  const isOpen = task.state === 'OPEN';
+  const canAdvance = isOpen && task.status < finalStatus;
+  const canReverse = isOpen && task.status > 1;
+  const canClose = isOpen && task.status === finalStatus;
 
   const changeStatus = useChangeStatus(task.id);
   const closeTask = useCloseTask(task.id);
@@ -67,28 +74,49 @@ export function StatusControls({
   const fieldError =
     failure instanceof ApiError ? (name: string) => failure.fieldError(name) : undefined;
 
-  if (task.state === 'CLOSED') {
-    return <p className="muted">This task is closed. Closed tasks are immutable (WF-2).</p>;
+  // WF-2, in the interface's own words. The rule id belongs in this comment, not on screen.
+  if (!isOpen) {
+    return (
+      <section className="workflow">
+        <p className="muted">This task is closed. Closed tasks can no longer be changed.</p>
+      </section>
+    );
   }
 
   return (
-    <div className="controls">
+    <section className="workflow">
+      <h3>Update task</h3>
+
       <ErrorBanner error={failure} />
 
-      <label className="field">
-        <span className="field-label">Hand over to</span>
-        <select value={assignee} disabled={pending} onChange={(e) => setAssignee(e.target.value)}>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* One assignee, both directions, stated once and above the actions it belongs to. */}
+      <div className="workflow-assignee">
+        <label className="field">
+          <span className="field-label">Hand over to</span>
+          <select
+            value={assignee}
+            disabled={pending}
+            onChange={(event) => setAssignee(event.target.value)}
+          >
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
+        <p className="hint">
+          {canAdvance
+            ? 'This person takes the task next.'
+            : 'Applies when you send the task back. Closing keeps it with its current holder.'}
+        </p>
+      </div>
+
+      {/* The primary slot: whatever moves this task on from where it stands. */}
       {canAdvance && (
         <form
-          className="panel"
+          className="workflow-primary"
           onSubmit={(event) => {
             event.preventDefault();
             changeStatus.mutate({
@@ -101,7 +129,7 @@ export function StatusControls({
           }}
         >
           <h4>
-            Advance to {nextStatus}. {descriptor.statuses[nextStatus - 1]?.name}
+            Next step: {nextStatus}. {nextStatusName}
           </h4>
 
           <DynamicFieldForm
@@ -112,15 +140,36 @@ export function StatusControls({
             disabled={pending}
           />
 
-          <button type="submit" disabled={pending}>
-            {pending ? 'Working…' : 'Advance'}
+          <button type="submit" className="primary" disabled={pending}>
+            {pending ? 'Working…' : 'Submit & Forward'}
           </button>
         </form>
       )}
 
+      {canClose && (
+        <div className="workflow-primary">
+          <h4>Final step reached</h4>
+          <p className="hint">
+            Closing finishes the task. It stays with its current holder, and nothing about it
+            can be changed afterwards.
+          </p>
+
+          <button
+            type="button"
+            className="primary"
+            disabled={pending}
+            onClick={() =>
+              closeTask.mutate({ actorUserId: currentUserId, expectedVersion: task.version })
+            }
+          >
+            {pending ? 'Working…' : 'Close task'}
+          </button>
+        </div>
+      )}
+
       {canReverse && (
         <form
-          className="panel"
+          className="workflow-secondary"
           onSubmit={(event) => {
             event.preventDefault();
             // No data: a backward move carries none, and what the target needs was already
@@ -133,47 +182,33 @@ export function StatusControls({
             });
           }}
         >
-          <h4>Send back</h4>
-          <label className="field">
-            <span className="field-label">To status</span>
-            <select
-              value={reverseTo}
-              disabled={pending}
-              onChange={(event) => setReverseTo(Number(event.target.value))}
-            >
-              {descriptor.statuses.slice(0, task.status - 1).map((status, index) => (
-                <option key={status.value} value={index + 1}>
-                  {index + 1}. {status.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="muted">Data collected after this status will be cleared (WF-7b).</p>
+          <span className="workflow-or">Not ready to move on?</span>
 
-          <button type="submit" disabled={pending}>
-            Send back
-          </button>
+          <div className="workflow-back">
+            <label className="field inline">
+              <span className="field-label">Back to</span>
+              <select
+                value={reverseTo}
+                disabled={pending}
+                onChange={(event) => setReverseTo(Number(event.target.value))}
+              >
+                {descriptor.statuses.slice(0, task.status - 1).map((status, index) => (
+                  <option key={status.value} value={index + 1}>
+                    {index + 1}. {status.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button type="submit" className="secondary" disabled={pending}>
+              Return to Previous
+            </button>
+          </div>
+
+          {/* WF-7b, said plainly. */}
+          <p className="hint">Anything collected after that step is cleared.</p>
         </form>
       )}
-
-      {canClose && (
-        <div className="panel">
-          <h4>Close</h4>
-          <p className="muted">
-            Permitted only at the final status. The task stays with its current holder
-            (ADR-011).
-          </p>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              closeTask.mutate({ actorUserId: currentUserId, expectedVersion: task.version })
-            }
-          >
-            Close task
-          </button>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
