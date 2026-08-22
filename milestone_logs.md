@@ -28,6 +28,7 @@
 | [M5](#m5--client-react-layer) | `9ad9383` | Vite + React Query, dynamic forms, structural proof |
 | [M6](#m6--docs--polish) | `3bdd880` | README, request collection, dead-code prune, clean-clone check |
 | [M7](#m7--marketing-the-extensibility-proof) | `a863f67` | The two-file commit |
+| [Retrospective](#retrospective---mvp-data-types-and-what-upgrading-them-actually-costs) | — | MVP data types and the cost of widening them |
 
 ---
 
@@ -738,6 +739,113 @@ The general lesson is sharper than the milestone: **a claim about how little a c
 also a claim about what your tests are coupled to.** Assertions that pin a registry's contents
 in suites that are not about the registry will quietly tax every future addition, and you only
 find out on the day you make one.
+
+---
+
+## Retrospective - MVP data types, and what upgrading them actually costs
+
+Raised during manual UAT: Procurement's `quotes` is a list of **strings**, when a real
+procurement system would hold money - an amount, a currency, probably a vendor beside it.
+
+That is deliberate, and it is not the only one. Rather than defend each field separately,
+here is the whole inventory and one honest account of what changing any of it would cost.
+
+### Every field in the system
+
+| Type | Field | Declared as | What it would be in a real product |
+|---|---|---|---|
+| Procurement | `quotes` | `string-array`, exactly 2, non-empty | a list of `{ vendor, amount, currency }` |
+| Procurement | `receipt` | `string`, non-empty | a document reference or an upload |
+| Development | `specification` | `string`, non-empty, multiline | rich text, or a link to the spec |
+| Development | `branchName` | `string`, non-empty | a git ref, pattern-constrained |
+| Development | `version` | `string`, non-empty | semver, pattern-constrained |
+| Marketing | `campaignUrl` | `string`, non-empty | a URL, format-validated |
+
+**Five of the six are `string` with `minLength: 1`.** That is the simplification, stated
+plainly: the platform proves that *a type declares what it needs and everything downstream
+obeys*, using the cheapest possible payloads. It does not prove that the payload vocabulary is
+rich, because that was never the question the assignment asked.
+
+`campaignUrl` is the sharpest example, and worth naming rather than hiding: the field is
+**called** a URL and accepts `"not a url"`. The name promises validation the descriptor does
+not deliver.
+
+### What the vocabulary cannot express today
+
+`string`, `number`, `boolean`, `date`, `string-array` - with `min`/`max`, lengths, and item
+counts. Absent, in rough order of how often a real product would want them:
+
+- **format or pattern** on a string - no regex, so URL, semver and git-ref rules cannot be
+  declared. This is why `campaignUrl` is only non-empty.
+- **enum / option set** - a field with fixed choices has to be a free-text string.
+- **money** - amount, currency and scale as one value. Floats are the wrong shape for money
+  and `number` is the only numeric kind there is.
+- **reference** - pointing at another entity (a user, another task) rather than repeating a
+  name as text.
+- **file** - `receipt` is the obvious candidate.
+- **heterogeneous list** - `string-array` is homogeneous, which is exactly why `quotes` is a
+  list of strings rather than a list of objects.
+
+Cross-field rules ("quote B must be lower than quote A") are a *separate* gap and already have
+an answer: the `onEnter` hook on a task type definition (section 8). The vocabulary stays small
+on purpose because that hatch exists.
+
+### The upgrade path, and its real cost
+
+Two different changes are routinely conflated. They cost very different amounts.
+
+**Adding a new kind, for a new field: cheap.** Four places, three of which the compiler
+demands:
+
+1. `packages/contracts/src/task-types.ts` - the `FieldKind` union and a descriptor interface.
+2. `apps/api/src/domain/task-types/field-schema.ts` - one builder. The mapped type
+   `{ [K in FieldKind]: FieldSchemaBuilder<K> }` makes omitting it a **compile error**.
+3. `apps/web/src/components/DynamicFieldForm.tsx` - one renderer, likewise compile-forced.
+4. `initialValues()` in the same file - see the finding below.
+
+Not touched: the workflow engine, the registry, any use case, any route, the composition root,
+the database, any migration, and every task type definition. A task type written a year ago
+picks the new kind up the moment it asks for it, and the form renders itself.
+
+**Changing an existing field's kind: not cheap, and worth being precise about.** Turning
+`quotes` from `string-array` into a money list is a **data migration**. Tasks already at status
+2 hold `{"2": {"quotes": ["Supplier A - 100", ...]}}` in JSONB, and `task_transitions` holds
+the same payloads in its append-only history, which by design is never rewritten. So it needs
+either a backfill with a parsing strategy, or a versioned descriptor so old and new payloads
+can coexist. The schema-free JSONB column that makes *adding* free is exactly what makes
+*changing* a migration - that is the other half of ADR-007's trade-off, and the honest answer
+to "so it is all free?" is: adding is, changing is not.
+
+### The cheapest real upgrades, ranked
+
+1. **`format?: 'url' | 'email'` on the string descriptor.** No new kind, no new renderer -
+   `<input type="url">` and `z.string().url()`. Fixes `campaignUrl` immediately and would give
+   `version` a semver pattern for the same money.
+2. **An `enum` kind.** The single most common form control the vocabulary lacks.
+3. **A `money` kind.** The one the UAT observation actually points at, and the one that also
+   drags in currency, rounding and display - which is why it is third rather than first.
+
+### A gap found while writing this
+
+The mapped types force a schema builder and a renderer for every kind. `initialValues()` does
+**not**: it is a `switch` with a `default:` that hands back `''`. A new kind whose empty value
+is not an empty string - money, a reference, an option set - would get a silently wrong initial
+value **with no compile error**, unlike the two places next to it.
+
+It is latent rather than live, since every kind that exists today is fine with `''` or is
+handled explicitly. But it is the one place where "the compiler will not let you forget"
+is untrue, and it should be an exhaustive map like its two neighbours. Recorded here rather
+than fixed, because this entry is documentation and that is a code change.
+
+### Why this is the right shape for the assignment
+
+The assignment asks whether a third *task type* can be added without changing existing code.
+It does not ask whether the field vocabulary is expressive. Spending the budget on money types
+and file uploads would have produced a richer demo of a *weaker* claim.
+
+What is worth saying out loud: the primitives are deliberately thin, the seam for widening them
+is a typed table on each side, adding to that table is compile-checked and touches no task type,
+and changing a field already in production is a data migration rather than a free lunch.
 
 ## Recurring themes so far
 

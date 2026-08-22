@@ -9,7 +9,7 @@ Node.js · TypeScript · Express · TypeORM · PostgreSQL · React
 ## Quick start
 
 ```bash
-git clone <repo> && cd dnb-task-platform
+git clone https://github.com/galhrn/dnb-task-platform.git && cd dnb-task-platform
 cp .env.example .env
 docker compose up -d          # PostgreSQL 16
 npm install                   # npm workspaces — installs api + web + contracts
