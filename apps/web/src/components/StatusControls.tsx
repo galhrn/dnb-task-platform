@@ -57,7 +57,6 @@ export function StatusControls({
   const [values, setValues] = useState<FieldValues>(() => initialValues(nextFields));
   const [assignee, setAssignee] = useState<string>(task.assignedUserId);
   const [reverseTo, setReverseTo] = useState<number>(1);
-  const reverseToName = descriptor.statuses[reverseTo - 1]?.name;
 
   // The task moved, so the form belongs to a different status now. Rebuilding from the
   // descriptor is what keeps this correct for a type this component has never seen.
@@ -201,10 +200,10 @@ export function StatusControls({
               </select>
             </label>
 
-            {/* Named, not "Previous": a backward move may span any distance (WF-5), so
-                the label has to follow the selection rather than assume one step. */}
+            {/* Fixed label. A backward move may span any distance (WF-5); which step it
+                lands on is shown by the select beside it, not repeated in the button. */}
             <button type="submit" className="secondary" disabled={pending}>
-              Return to {reverseTo}. {reverseToName}
+              Return to Previous
             </button>
           </div>
 

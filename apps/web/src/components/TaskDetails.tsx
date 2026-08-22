@@ -69,16 +69,21 @@ export function TaskDetails({
         })}
       </ol>
 
-      <dl className="meta">
-        <dt>Held by</dt>
-        <dd>{userName(users, task.assignedUserId)}</dd>
-        <dt>Version</dt>
-        <dd>{task.version}</dd>
-        <dt>Id</dt>
-        <dd>
-          <code>{task.id}</code>
-        </dd>
-      </dl>
+      <details className="meta-details">
+        <summary>
+          <span className="meta-label">Held by:</span>{' '}
+          <span className="meta-holder">{userName(users, task.assignedUserId)}</span>
+        </summary>
+
+        <dl className="meta">
+          <dt>Version</dt>
+          <dd>{task.version}</dd>
+          <dt>Id</dt>
+          <dd>
+            <code>{task.id}</code>
+          </dd>
+        </dl>
+      </details>
 
       <StatusControls
         task={task}
