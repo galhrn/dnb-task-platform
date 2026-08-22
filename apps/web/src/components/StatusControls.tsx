@@ -89,10 +89,10 @@ export function StatusControls({
 
       <ErrorBanner error={failure} />
 
-      {/* One assignee, both directions, stated once and above the actions it belongs to. */}
+      {/* One assignee for both directions, stated once and above the actions it belongs to. */}
       <div className="workflow-assignee">
         <label className="field">
-          <span className="field-label">Hand over to</span>
+          <span className="field-label">Assign to</span>
           <select
             value={assignee}
             disabled={pending}
@@ -108,8 +108,8 @@ export function StatusControls({
 
         <p className="hint">
           {canAdvance
-            ? 'This person takes the task next.'
-            : 'Applies when you send the task back. Closing keeps it with its current holder.'}
+            ? 'This person becomes the assignee.'
+            : 'Applies when you send the task back. Closing keeps the current assignee.'}
         </p>
       </div>
 

@@ -71,7 +71,7 @@ export function TaskDetails({
 
       <details className="meta-details">
         <summary>
-          <span className="meta-label">Held by:</span>{' '}
+          <span className="meta-label">Assignee:</span>{' '}
           <span className="meta-holder">{userName(users, task.assignedUserId)}</span>
         </summary>
 
@@ -111,19 +111,28 @@ export function TaskDetails({
       </details>
 
       <details className="history" open>
-        <summary>History ({task.transitions.length})</summary>
+        <summary>
+          History ({task.transitions.length}) <span className="muted">· newest first</span>
+        </summary>
         <table>
           <thead>
             <tr>
               <th>When</th>
               <th>Move</th>
-              <th>Kind</th>
+              <th>Action</th>
               <th>By</th>
-              <th>Handed to</th>
+              <th>Assigned to</th>
             </tr>
           </thead>
           <tbody>
-            {task.transitions.map((transition) => (
+            {/*
+              Newest first, the convention for an audit log - nobody scrolls to find what
+              just happened. The API returns them oldest-first, which is the honest order
+              for the record itself; reversing is a presentation choice, so it happens here
+              rather than in the endpoint. A copy, because reverse() mutates in place and
+              the array belongs to the query cache.
+            */}
+            {[...task.transitions].reverse().map((transition) => (
               <tr key={transition.id}>
                 <td className="when">{formatMoment(transition.createdAt)}</td>
                 <td className="move">
@@ -132,14 +141,10 @@ export function TaskDetails({
                 <td>
                   <code>{transition.kind}</code>
                 </td>
-                {/* Who did it, as distinct from who received it. On a CLOSE the task
-                    changes hands to nobody, so the actor is the only name there is. */}
+                {/* Who did it, as distinct from who holds it afterwards. A close names no
+                    new assignee (ADR-011), so these two match on that row. */}
                 <td className="actor">{userName(users, transition.actorUserId)}</td>
-                <td className={transition.kind === 'CLOSE' ? 'muted' : undefined}>
-                  {transition.kind === 'CLOSE'
-                    ? 'nobody — closed'
-                    : userName(users, transition.assignedUserId)}
-                </td>
+                <td>{userName(users, transition.assignedUserId)}</td>
               </tr>
             ))}
           </tbody>
