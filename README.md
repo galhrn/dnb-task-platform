@@ -4,6 +4,17 @@ A task-management system built so that **adding a new task type requires adding 
 
 Node.js · TypeScript · Express · TypeORM · PostgreSQL · React
 
+![The task view: status ladder, update panel and audit log](apps/web/public/task-platform.png)
+
+The task view keeps one decision in one place — who takes the task next, then the single
+action that moves it on — with the assignee stated once above both, because it is part of
+the same submission. The progress tracker across the top is drawn from the task type's own
+status ladder, completed steps carrying a ✓, and every field below it is rendered from
+server metadata rather than from anything the client knows about procurement or
+development. Technical details collapse out of the way behind the assignee line, and the
+audit log reads newest-first, recording who *performed* each transition separately from who
+*received* the task.
+
 ---
 
 ## Quick start
@@ -18,16 +29,14 @@ npm run seed                  # demo users
 npm run dev                   # api :3000, web :5173
 ```
 
-Open <http://localhost:5173>.
-
 Then open <http://localhost:5173>. `npm run dev` runs the API on :3000 and the client on
 :5173; the client proxies `/api` to the API, so the browser only ever sees one origin.
 
 Useful afterwards:
 
 ```bash
-npm test          # 177 unit tests, no container needed
-npm run test:int  #  49 integration tests, needs the database
+npm test          # 191 unit tests, no container needed
+npm run test:int  #  52 integration tests, needs the database
 npm run db:reset  # drop the volume and start clean
 ```
 
@@ -438,13 +447,14 @@ npm run test:int      # integration — requires docker compose up
 
 The domain suite covers each of the seven workflow rules by name. The integration suite covers each error code above. One structural test registers a throwaway task type at runtime, asserting that extensibility is a property of the code rather than a claim in this file.
 
-**229 tests.** 177 run without a database, in about a second.
+**243 tests.** 191 run without a database, in about a second.
 
 | Suite | Tests | What it proves |
 |---|---|---|
 | `domain/workflow/workflow-engine.test.ts` | 38 | WF-1..WF-7 and every derived rule, by name |
 | `domain/task-types/*` | 42 | the descriptor vocabulary, the registry, and that the catalogue matches this page |
 | `domain/purity.test.ts` | 12 | `domain/` imports no framework |
+| `application/purity.test.ts` | 14 | `application/` depends on ports, never on TypeORM, Express or `infrastructure/` |
 | `domain/extensibility.test.ts` | 7 | a five-status type registered at runtime runs its whole lifecycle |
 | `application/use-cases/*` | 27 | orchestration, transaction boundaries, which error wins when two things are wrong |
 | `application/testing/*` | 8 | the in-memory doubles satisfy the repository contract |
