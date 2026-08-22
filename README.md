@@ -4,7 +4,7 @@ A task-management system built so that **adding a new task type requires adding 
 
 Node.js · TypeScript · Express · TypeORM · PostgreSQL · React
 
-![The task view: status ladder, update panel and audit log](apps/web/public/task-platform.png)
+![The task view: status ladder, update panel and audit log](docs/task-platform.png)
 
 The task view keeps one decision in one place — who takes the task next, then the single
 action that moves it on — with the assignee stated once above both, because it is part of
