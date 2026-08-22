@@ -22,6 +22,13 @@ export class GetUserTasksUseCase {
     private readonly users: UserRepository,
   ) {}
 
+  /**
+   * @param input the user, and optionally the single state to narrow to
+   * @returns every task the user currently holds, newest first; open and closed unless
+   *   narrowed (ADR-012)
+   * @throws {UserNotFoundError} if the user does not exist - an unknown user is a 404,
+   *   not an empty list
+   */
   async execute(input: GetUserTasksInput): Promise<PersistedTask[]> {
     if (!(await this.users.exists(input.userId))) {
       throw new UserNotFoundError(input.userId);

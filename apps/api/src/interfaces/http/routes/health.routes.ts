@@ -16,10 +16,11 @@ async function probeDatabase(dataSource: DataSource): Promise<HealthResponse['da
 }
 
 /**
- * GET /api/health - liveness plus a live database probe.
+ * `GET /api/health` - liveness plus a live database probe.
  *
- * 503 when the database is unreachable: a health check that reports "ok" while its
- * only dependency is down is worse than no health check at all.
+ * @returns `200` `{ status: 'ok', database: 'up' }` when the database answers
+ * @returns `503` `{ status: 'degraded', database: 'down' }` when it does not - a health
+ *   check that reports "ok" while its only dependency is down is worse than none at all
  */
 export function createHealthRouter(dataSource: DataSource): Router {
   const router = Router();

@@ -120,8 +120,16 @@ function validateEntryData(
 }
 
 /**
- * Creates a task at status 1. WF-3a: nothing transitions into the creation status, so it
- * has no entry requirements and collects no data.
+ * Creates a task at the type's first status.
+ *
+ * WF-3a: nothing transitions *into* the creation status, so it has no entry requirements
+ * and collects no data - which is why this takes no payload.
+ *
+ * @param definition the task type being created, from the registry
+ * @param input who the task starts with, and who is creating it
+ * @returns the new task, without an identity or version - persistence assigns those - and
+ *   the CREATE row for the history
+ * @throws {ValidationFailedError} if either user is missing (WF-1)
  */
 export function createTask(
   definition: TaskTypeDefinition,
@@ -220,8 +228,25 @@ function moveBackward(
 }
 
 /**
- * The single entry point for both directions. Direction is DERIVED from the target
- * status - a caller never declares it, so a caller can never lie about it.
+ * Moves a task, in either direction. The single entry point for both, because direction is
+ * DERIVED from the target status - a caller never declares it, so a caller cannot lie
+ * about it, and no endpoint has to be trusted to pick the right one.
+ *
+ * Enforces, in this order: the task is open (WF-2), an assignee and an actor are named
+ * (WF-1, WF-7), the target is a real status for this type (WF-3), it is not where the task
+ * already is (WF-4a), and then either exactly one step forward (WF-4) or any distance back
+ * (WF-5). Forward moves validate the target's entry data (WF-7, ADR-005); backward moves
+ * carry none and clear everything collected beyond the target (WF-7b, ADR-006).
+ *
+ * @param definition the task's own type, from the registry
+ * @param task the task as it stands now
+ * @param command where it should end up, who takes it, who is moving it, and any data
+ * @returns the next task state and the history row to append; the input is not mutated
+ * @throws {TaskClosedError} if the task is closed - closed tasks are immutable (WF-2)
+ * @throws {InvalidTransitionError} if the target is out of range, unchanged, or more than
+ *   one step forward
+ * @throws {ValidationFailedError} if the entry data is missing or wrong, if data is
+ *   supplied on a backward move, or if a user is missing
  */
 export function changeTaskStatus(
   definition: TaskTypeDefinition,
@@ -255,7 +280,21 @@ export function changeTaskStatus(
     : moveBackward(definition, task, command);
 }
 
-/** WF-6 - a task may only be closed at its final status. */
+/**
+ * Closes a task. WF-6: permitted only at the final status, which is the length of the
+ * type's own ladder rather than any number written down here.
+ *
+ * Closing is a state change, not a status change, so it names no next assignee and the
+ * task stays with whoever held it (ADR-011, WF-6b). It still records who did it.
+ *
+ * @param definition the task's own type, from the registry
+ * @param task the task as it stands now
+ * @param actorUserId who is closing it
+ * @returns the closed task and the CLOSE row, whose `toStatus` is null
+ * @throws {TaskClosedError} if it is already closed - not idempotent success (WF-6a)
+ * @throws {InvalidTransitionError} if the task has not reached its final status
+ * @throws {ValidationFailedError} if no actor is named
+ */
 export function closeTask(
   definition: TaskTypeDefinition,
   task: TaskSnapshot,

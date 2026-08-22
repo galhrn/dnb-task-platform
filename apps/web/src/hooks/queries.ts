@@ -1,5 +1,11 @@
-import type { TaskState } from '@task-platform/contracts';
-import { useQuery } from '@tanstack/react-query';
+import type {
+  TaskDto,
+  TaskState,
+  TaskTypeDescriptor,
+  TaskWithHistoryDto,
+  UserDto,
+} from '@task-platform/contracts';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 import { api } from '../api/client';
 
@@ -20,7 +26,7 @@ export const taskKeys = {
  * registers a new task type, which cannot happen while the tab is open - so it is fetched
  * once and never refetched.
  */
-export function useTaskTypes() {
+export function useTaskTypes(): UseQueryResult<TaskTypeDescriptor[], Error> {
   return useQuery({
     queryKey: ['task-types'],
     queryFn: api.listTaskTypes,
@@ -28,7 +34,7 @@ export function useTaskTypes() {
   });
 }
 
-export function useUsers() {
+export function useUsers(): UseQueryResult<UserDto[], Error> {
   return useQuery({
     queryKey: ['users'],
     queryFn: api.listUsers,
@@ -36,14 +42,14 @@ export function useUsers() {
   });
 }
 
-export function useUserTasks(userId: string, state?: TaskState) {
+export function useUserTasks(userId: string, state?: TaskState): UseQueryResult<TaskDto[], Error> {
   return useQuery({
     queryKey: taskKeys.byUser(userId, state),
     queryFn: () => api.getUserTasks(userId, state),
   });
 }
 
-export function useTask(taskId: string | null) {
+export function useTask(taskId: string | null): UseQueryResult<TaskWithHistoryDto, Error> {
   return useQuery({
     queryKey: taskKeys.byId(taskId ?? ''),
     queryFn: () => api.getTask(taskId as string),

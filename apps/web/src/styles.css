@@ -56,6 +56,9 @@ h4 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
 .field.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .field-label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px;
   font-weight: 500; }
+
+/* Keep labels on a single line when used inline with inputs/selects */
+.field.inline .field-label { display: inline-block; margin-bottom: 0; white-space: nowrap; }
 .required { color: var(--error); }
 .field input[type="text"], .field input[type="number"], .field input[type="date"],
 .field select, .field textarea, .entry input {

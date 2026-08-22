@@ -25,6 +25,15 @@ export class CloseTaskUseCase {
     private readonly unitOfWork: UnitOfWork,
   ) {}
 
+  /**
+   * @param input the task, who is closing it, and an optional `expectedVersion`
+   * @returns the closed task, still held by the same user (ADR-011)
+   * @throws {TaskNotFoundError} if the task does not exist (404)
+   * @throws {VersionConflictError} if `expectedVersion` is stale or the row moved (409)
+   * @throws {TaskClosedError} if it is already closed (409)
+   * @throws {InvalidTransitionError} if it has not reached its final status (409)
+   * @throws {UserNotFoundError} if the actor does not exist (404)
+   */
   async execute(input: CloseTaskInput): Promise<PersistedTask> {
     return this.unitOfWork.runInTransaction(async ({ tasks, users }) => {
       const task = await tasks.findById(input.taskId);

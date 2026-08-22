@@ -29,6 +29,17 @@ export class ChangeTaskStatusUseCase {
     private readonly unitOfWork: UnitOfWork,
   ) {}
 
+  /**
+   * @param input the task, the target status, who takes it, who is moving it, and any
+   *   entry data. `expectedVersion` is the caller's stale-page check (ADR-015)
+   * @returns the task as persisted after the move
+   * @throws {TaskNotFoundError} if the task does not exist (404)
+   * @throws {VersionConflictError} if `expectedVersion` is stale, or if the row moved
+   *   between this request reading it and writing it back (409)
+   * @throws {TaskClosedError} {InvalidTransitionError} {ValidationFailedError} whatever
+   *   the workflow engine decides about the move itself (409 / 409 / 422)
+   * @throws {UserNotFoundError} if the assignee or the actor does not exist (404)
+   */
   async execute(input: ChangeTaskStatusInput): Promise<PersistedTask> {
     return this.unitOfWork.runInTransaction(async ({ tasks, users }) => {
       const task = await tasks.findById(input.taskId);

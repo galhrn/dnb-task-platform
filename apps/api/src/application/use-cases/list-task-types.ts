@@ -10,6 +10,11 @@ import type { TaskTypeRegistry } from '../../domain/task-types/registry';
 export class ListTaskTypesUseCase {
   constructor(private readonly registry: TaskTypeRegistry) {}
 
+  /**
+   * @returns every registered type with its statuses and the field descriptors needed to
+   *   enter each one - the metadata the client renders its forms from. Never throws:
+   *   there is no input to reject and no database to be unavailable.
+   */
   execute(): TaskTypeDescriptor[] {
     return this.registry.describe();
   }

@@ -95,7 +95,10 @@ const RENDERERS: { [K in FieldKind]: FieldRenderer<K> } = {
     return (
       <div className="entries">
         {entries.map((entry, index) => (
-          // eslint-disable-next-line react/no-array-index-key -- the index IS the identity
+          // The index as key is normally a bug, because it re-associates state with the
+          // wrong row when a list reorders. Here it is correct: these are positional
+          // slots in a fixed-length list of plain strings with no identity of their own,
+          // and "the second quote" IS index 1 - there is nothing stabler to key on.
           <div className="entry" key={index}>
             <input
               type="text"

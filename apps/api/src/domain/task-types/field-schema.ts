@@ -154,8 +154,16 @@ function compileFieldSchema(field: FieldDescriptor): ZodTypeAny {
 }
 
 /**
+ * Compiles a status's field descriptors into the schema that validates entry to it.
+ *
  * `.strict()` on purpose: a key the type never declared is a typo or a stale client, and
  * silently storing it in the JSONB projection would be the quiet kind of bug.
+ *
+ * The return type is inferred deliberately - `StatusSchema` below is defined as
+ * `ReturnType<typeof compileStatusSchema>`, so annotating it here would be circular.
+ *
+ * @param fields the target status's entry requirements; an empty list yields a schema
+ *   that accepts `{}` and rejects everything else
  */
 export function compileStatusSchema(fields: readonly FieldDescriptor[]) {
   const shape: Record<string, ZodTypeAny> = {};

@@ -27,6 +27,6 @@ export interface ApiErrorBody {
   error: {
     code: ErrorCode;
     message: string;
-    details?: ApiErrorDetail[];
+    details?: readonly ApiErrorDetail[];
   };
 }

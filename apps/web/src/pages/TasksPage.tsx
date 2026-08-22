@@ -1,4 +1,3 @@
-import type { TaskState } from '@task-platform/contracts';
 import { type JSX, useState } from 'react';
 
 import { CreateTaskForm } from '../components/CreateTaskForm';
@@ -19,7 +18,14 @@ import { useTaskTypes, useUserTasks, useUsers } from '../hooks/queries';
  */
 const DEFAULT_USER_ID = '11111111-1111-4111-8111-111111111111';
 
-type StateFilter = TaskState | 'ALL';
+const STATE_FILTERS = ['ALL', 'OPEN', 'CLOSED'] as const;
+
+type StateFilter = (typeof STATE_FILTERS)[number];
+
+/** A <select> hands back a plain string; this narrows it without asserting. */
+function isStateFilter(value: string): value is StateFilter {
+  return STATE_FILTERS.some((candidate) => candidate === value);
+}
 
 export function TasksPage(): JSX.Element {
   const [actingAs, setActingAs] = useState<string>(DEFAULT_USER_ID);
@@ -71,7 +77,11 @@ export function TasksPage(): JSX.Element {
             <span className="field-label">Showing</span>
             <select
               value={filter}
-              onChange={(event) => setFilter(event.target.value as StateFilter)}
+              onChange={(event) => {
+                if (isStateFilter(event.target.value)) {
+                  setFilter(event.target.value);
+                }
+              }}
             >
               <option value="ALL">All</option>
               <option value="OPEN">Open</option>

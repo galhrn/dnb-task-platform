@@ -2,8 +2,6 @@
  * Request and response shapes for the HTTP API (project_context.md section 9).
  */
 
-import type { TaskTypeDescriptor } from './task-types';
-
 export type TaskState = 'OPEN' | 'CLOSED';
 
 export type TransitionKind = 'CREATE' | 'FORWARD' | 'BACKWARD' | 'CLOSE';
@@ -72,11 +70,6 @@ export interface CloseTaskRequest {
   actorUserId: string;
   expectedVersion?: number;
 }
-
-/** Optional `?state=` filter on GET /users/:id/tasks (ADR-012). */
-export type TaskStateFilter = TaskState;
-
-export type ListTaskTypesResponse = TaskTypeDescriptor[];
 
 export interface HealthResponse {
   status: 'ok' | 'degraded';

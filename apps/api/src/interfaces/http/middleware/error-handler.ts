@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ErrorCode } from '@task-platform/contracts';
+import type { ApiErrorBody, ApiErrorDetail, ErrorCode } from '@task-platform/contracts';
 import type { ErrorRequestHandler } from 'express';
 
 import { DomainError } from '../../../domain/workflow/errors';
@@ -32,11 +32,20 @@ function isMalformedJson(error: unknown): boolean {
   );
 }
 
-function envelope(code: ErrorCode, message: string, details: readonly unknown[]): ApiErrorBody {
+/**
+ * Builds the single response envelope every non-2xx uses (section 9). `details` is omitted
+ * rather than sent empty, so a client can treat its presence as "there is field-level
+ * information here".
+ */
+function envelope(
+  code: ErrorCode,
+  message: string,
+  details: readonly ApiErrorDetail[],
+): ApiErrorBody {
   const body: ApiErrorBody = { error: { code, message } };
 
   if (details.length > 0) {
-    body.error.details = details as ApiErrorBody['error']['details'];
+    body.error.details = details;
   }
 
   return body;

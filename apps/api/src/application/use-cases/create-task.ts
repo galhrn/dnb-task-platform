@@ -23,6 +23,12 @@ export class CreateTaskUseCase {
     private readonly unitOfWork: UnitOfWork,
   ) {}
 
+  /**
+   * @param input the type to create, who it starts with, and who is creating it
+   * @returns the persisted task at status 1, version 1
+   * @throws {TaskTypeNotFoundError} if the type is not registered (404)
+   * @throws {UserNotFoundError} if the assignee or the actor does not exist (404)
+   */
   async execute(input: CreateTaskInput): Promise<PersistedTask> {
     const definition = this.registry.get(input.type);
 

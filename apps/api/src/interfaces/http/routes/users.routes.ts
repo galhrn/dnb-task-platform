@@ -14,6 +14,11 @@ export interface UsersRouterDependencies {
 export function createUsersRouter(deps: UsersRouterDependencies): Router {
   const router = Router();
 
+  /**
+   * `GET /api/users` - the seeded users, for assignee pickers.
+   *
+   * @returns `200` with the users, by name
+   */
   router.get(
     '/users',
     asyncRoute(async (_req, res) => {
@@ -23,7 +28,14 @@ export function createUsersRouter(deps: UsersRouterDependencies): Router {
     }),
   );
 
-  // ADR-012: everything by default, `?state=OPEN|CLOSED` narrows, anything else is a 400.
+  /**
+   * `GET /api/users/:id/tasks` - the tasks a user currently holds.
+   *
+   * @query `state` - optional, `OPEN` or `CLOSED`. Absent means both (ADR-012); an
+   *   unrecognised value is rejected rather than ignored.
+   * @returns `200` with the tasks, newest first
+   * @returns `400` if the id is not a uuid or `state` is unrecognised, `404` if no such user
+   */
   router.get(
     '/users/:id/tasks',
     asyncRoute(async (req, res) => {

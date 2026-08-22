@@ -12,6 +12,13 @@ import type { ListTaskTypesUseCase } from '../../../application/use-cases/list-t
 export function createTaskTypesRouter(listTaskTypes: ListTaskTypesUseCase): Router {
   const router = Router();
 
+  /**
+   * `GET /api/task-types` - every registered type, its statuses, and the field descriptors
+   * required to enter each one.
+   *
+   * @returns `200` with the descriptors. No database is touched, so this cannot fail for
+   *   any reason a caller could act on.
+   */
   router.get('/task-types', (_req, res) => {
     res.status(200).json(listTaskTypes.execute());
   });

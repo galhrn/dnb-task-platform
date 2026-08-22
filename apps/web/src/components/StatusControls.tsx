@@ -60,13 +60,18 @@ export function StatusControls({
 
   // The task moved, so the form belongs to a different status now. Rebuilding from the
   // descriptor is what keeps this correct for a type this component has never seen.
+  //
+  // The dependency list is intentionally the task's identity and position rather than the
+  // values this effect reads. `nextFields` is derived from the descriptor on every render,
+  // so depending on it would re-run the effect each time and wipe what the user is typing;
+  // the mutation objects are likewise new each render. Position is what makes the form
+  // stale, so position is what this watches.
   useEffect(() => {
     setValues(initialValues(nextFields));
     setAssignee(task.assignedUserId);
     setReverseTo(Math.max(1, task.status - 1));
     changeStatus.reset();
     closeTask.reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the task's position
   }, [task.id, task.status, task.state, task.version]);
 
   const pending = changeStatus.isPending || closeTask.isPending;

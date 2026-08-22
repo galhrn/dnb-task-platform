@@ -4,6 +4,7 @@ import type { UserRecord, UserRepository } from '../ports/user-repository';
 export class ListUsersUseCase {
   constructor(private readonly users: UserRepository) {}
 
+  /** @returns the seeded users, by name, for assignee pickers. */
   execute(): Promise<UserRecord[]> {
     return this.users.list();
   }
