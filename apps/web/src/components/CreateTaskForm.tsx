@@ -47,9 +47,10 @@ export function CreateTaskForm({
       <label className="field">
         <span className="field-label">Type</span>
         <select value={type} onChange={(event) => setType(event.target.value)}>
+          {/* The ladder length belongs on the task, not in a list of names to pick from. */}
           {descriptors.map((descriptor) => (
             <option key={descriptor.type} value={descriptor.type}>
-              {descriptor.label} ({descriptor.statuses.length} statuses)
+              {descriptor.label}
             </option>
           ))}
         </select>
@@ -66,7 +67,7 @@ export function CreateTaskForm({
         </select>
       </label>
 
-      <button type="submit" disabled={createTask.isPending || type.length === 0}>
+      <button type="submit" className="primary" disabled={createTask.isPending || type.length === 0}>
         {createTask.isPending ? 'Creating…' : 'Create'}
       </button>
     </form>

@@ -7,6 +7,14 @@
   --accent: #1f5fbf;
   --error: #b42318;
   --ok: #067647;
+  /* State tints. Light enough to read as a label rather than an alert. */
+  --ok-bg: #ecfdf3;
+  --ok-line: #a6f4c5;
+  --closed-bg: #f2f4f7;
+  --closed-line: #e4e7ec;
+  /* Darker than --muted on purpose: --muted on the tint is 4.39:1, under AA for
+     11px text. This clears it at 5.41:1 and still reads as grey, not black. */
+  --closed-ink: #5d6470;
 }
 
 * { box-sizing: border-box; }
@@ -81,9 +89,18 @@ button.ghost { background: none; color: var(--accent); border-color: var(--line)
 .card-body .status { font-weight: 550; }
 .card-foot { font-size: 12px; margin-top: 8px; }
 
-.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
-.pill.open { color: var(--ok); border-color: var(--ok); }
-.pill.closed { color: var(--muted); border-color: var(--line); background: #f3f4f6; }
+/* Open and closed are the two states in the domain, so they get the two tints. The fill
+   carries the meaning; the border only keeps the shape legible against a white card. */
+.pill {
+  font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid;
+}
+.pill.open { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
+.pill.closed {
+  color: var(--closed-ink);
+  background: var(--closed-bg);
+  border-color: var(--closed-line);
+}
 
 .details header { display: flex; justify-content: space-between; align-items: center;
   gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
@@ -91,7 +108,14 @@ button.ghost { background: none; color: var(--accent); border-color: var(--line)
 
 .ladder { list-style: none; padding: 0; margin: 18px 0 22px; display: flex; flex-wrap: wrap; gap: 8px; }
 .ladder li { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; }
-.ladder .rung { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: #eef1f5; }
+.ladder .rung {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  background: #eef1f5;
+}
+/* The check sits fractionally high in most system faces at this size. */
+.ladder li.done .rung { font-size: 12px; line-height: 1; }
 .ladder li.done { color: var(--ok); border-color: var(--ok); }
 .ladder li.done .rung { background: var(--ok); color: #fff; }
 .ladder li.current { border-color: var(--accent); font-weight: 600; }

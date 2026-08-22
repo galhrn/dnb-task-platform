@@ -54,21 +54,19 @@ export function TaskDetails({
 
       {/* The ladder, drawn from the descriptor. A type with two statuses draws two. */}
       <ol className="ladder">
-        {descriptor.statuses.map((status) => (
-          <li
-            key={status.value}
-            className={
-              status.value === task.status
-                ? 'current'
-                : status.value < task.status
-                  ? 'done'
-                  : 'ahead'
-            }
-          >
-            <span className="rung">{status.value}</span>
-            <span>{status.name}</span>
-          </li>
-        ))}
+        {descriptor.statuses.map((status) => {
+          const reached = status.value < task.status;
+          const here = status.value === task.status;
+
+          return (
+            <li key={status.value} className={here ? 'current' : reached ? 'done' : 'ahead'}>
+              {/* A step that is behind you does not need its number repeated - it needs to
+                  say it is finished. Plain Unicode, no icon font. */}
+              <span className="rung">{reached ? '✓' : status.value}</span>
+              <span>{status.name}</span>
+            </li>
+          );
+        })}
       </ol>
 
       <dl className="meta">
